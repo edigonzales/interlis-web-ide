@@ -1,6 +1,6 @@
 {
   "name": "interlis-web-ide",
-  "version": "0.0.0",
+  "version": "1.0.0-rc.1",
   "private": true,
   "type": "module",
   "packageManager": "pnpm@11.14.0",
@@ -10,7 +10,7 @@
   "scripts": {
     "dev": "vite",
     "preview": "vite preview",
-    "build": "tsc -b && vite build",
+    "build": "tsc -b && node --max-old-space-size=8192 ./node_modules/vite/bin/vite.js build",
     "typecheck": "tsc -b --pretty false",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
@@ -34,6 +34,10 @@
     "vitest": "^4.0.16"
   },
   "dependencies": {
+    "@ilic/diagram": "1.0.0-rc.1",
+    "@ilic/docx": "1.0.0-rc.1",
+    "@ilic/language-service": "1.0.0-rc.1",
+    "@ilic/monaco-adapter": "1.0.0-rc.1",
     "@codingame/monaco-vscode-api": "35.0.1",
     "@codingame/monaco-vscode-configuration-service-override": "35.0.1",
     "@codingame/monaco-vscode-files-service-override": "35.0.1",

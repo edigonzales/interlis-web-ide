@@ -16,6 +16,17 @@ jobs:
     steps:
       - uses: actions/checkout@v6
         with:
+          path: interlis-web-ide
+          persist-credentials: false
+      - uses: actions/checkout@v6
+        with:
+          repository: edigonzales/interlis-language-tools
+          path: interlis-language-tools
+          persist-credentials: false
+      - uses: actions/checkout@v6
+        with:
+          repository: edigonzales/ilic-fork
+          path: ilic-fork
           persist-credentials: false
       - uses: pnpm/action-setup@v4
         with:
@@ -24,17 +35,38 @@ jobs:
         with:
           node-version: "22"
           cache: pnpm
+          cache-dependency-path: |
+            interlis-language-tools/pnpm-lock.yaml
+            interlis-web-ide/pnpm-lock.yaml
+      - name: Build pinned compiler WASM
+        shell: bash
+        working-directory: ilic-fork
+        run: |
+          set -euo pipefail
+          emscripten_version=$(tr -d '[:space:]' < .emscripten-version)
+          git clone --depth 1 https://github.com/emscripten-core/emsdk.git "$RUNNER_TEMP/emsdk"
+          "$RUNNER_TEMP/emsdk/emsdk" install "$emscripten_version"
+          "$RUNNER_TEMP/emsdk/emsdk" activate "$emscripten_version"
+          source "$RUNNER_TEMP/emsdk/emsdk_env.sh"
+          ./scripts/build-wasm.sh
+      - name: Build cross-repository npm tarballs
+        working-directory: interlis-language-tools
+        run: pnpm install --frozen-lockfile && pnpm pack:verify
       - run: pnpm install --frozen-lockfile
+        working-directory: interlis-web-ide
       - run: pnpm check
+        working-directory: interlis-web-ide
       - run: pnpm exec playwright install --with-deps chromium firefox webkit
+        working-directory: interlis-web-ide
       - run: pnpm e2e
+        working-directory: interlis-web-ide
       - uses: actions/upload-artifact@v6
         if: always()
         with:
           name: interlis-web-ide-${{ github.sha }}
           path: |
-            dist
-            playwright-report
-            test-results
+            interlis-web-ide/dist
+            interlis-web-ide/playwright-report
+            interlis-web-ide/test-results
           if-no-files-found: error
           retention-days: 14

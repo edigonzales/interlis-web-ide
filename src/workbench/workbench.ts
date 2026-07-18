@@ -1,4 +1,28 @@
 import type { editor } from "monaco-editor";
+import {
+  DiagramController,
+  captureViewport,
+  defaultDiagramSettings,
+  layoutAndRenderDiagram,
+  restoreViewport,
+  sourceLocationForNode,
+  type AnchoredViewport,
+  type DiagramSettings,
+  type LayoutDiagram,
+} from "@ilic/diagram";
+import { generateDocx } from "@ilic/docx";
+import {
+  OFFLINE_TEMPLATE,
+  fetchTemplate,
+  isBlankInterlisDocument,
+  type LanguageService,
+  type VersionedResult,
+  type SemanticSnapshot,
+} from "@ilic/language-service";
+import type {
+  Disposable as LanguageDisposable,
+  MonacoLanguageAdapter,
+} from "@ilic/monaco-adapter";
 import { monaco } from "../vscode-services.js";
 import {
   BufferRecoveryStore,
@@ -23,6 +47,7 @@ interface OpenTab {
   readonly model: editor.ITextModel;
   dirty: boolean;
   recoveryTimer: ReturnType<typeof setTimeout> | null;
+  readonly language: LanguageDisposable;
 }
 
 interface Command {
@@ -41,11 +66,25 @@ MODEL NewModel AT "https://example.invalid/models" VERSION "1" =
 END NewModel.
 `;
 
+const diagramSettingsKey = "interlis-web-ide.diagram-settings";
+
+function readDiagramSettings(): DiagramSettings {
+  try {
+    const stored = JSON.parse(
+      localStorage.getItem(diagramSettingsKey) ?? "{}",
+    ) as Partial<DiagramSettings>;
+    return { ...defaultDiagramSettings, ...stored };
+  } catch {
+    return defaultDiagramSettings;
+  }
+}
+
 export class WebIdeWorkbench {
   readonly #tabs = new Map<string, OpenTab>();
   readonly #handleStore = new DirectoryHandleStore();
   readonly #commands: Command[];
   readonly #workspaceListeners = new Set<() => void>();
+  readonly #diagram = new DiagramController();
   #workspace: WorkspaceFileSystem;
   #recovery: BufferRecoveryStore;
   #primary!: editor.IStandaloneCodeEditor;
@@ -53,12 +92,20 @@ export class WebIdeWorkbench {
   #activePath: string | null = null;
   #activeView = "explorer";
   #sidebarGeneration = 0;
+  #diagramGeneration = 0;
+  #diagramLayout: LayoutDiagram | null = null;
+  #diagramViewport: AnchoredViewport | null = null;
+  #diagramSvg = "";
+  #diagramVisible = true;
+  #diagramSettings = readDiagramSettings();
   #sourceControlRenderer: (() => HTMLElement | Promise<HTMLElement>) | null =
     null;
 
   constructor(
     private readonly host: HTMLElement,
     private readonly manager: WorkspaceManager,
+    private readonly languageService: LanguageService,
+    private readonly languageAdapter: MonacoLanguageAdapter,
   ) {
     this.#workspace = manager.activeFileSystem;
     this.#recovery = new BufferRecoveryStore(this.#workspace);
@@ -67,6 +114,16 @@ export class WebIdeWorkbench {
         id: "new-file",
         label: "File: New INTERLIS Model",
         run: () => this.newFile(),
+      },
+      {
+        id: "new-from-template",
+        label: "INTERLIS: New Model from Remote Template",
+        run: () => this.newFromRemoteTemplate(),
+      },
+      {
+        id: "new-from-offline-template",
+        label: "INTERLIS: New Model from Offline Template",
+        run: () => this.newFile(OFFLINE_TEMPLATE),
       },
       { id: "save", label: "File: Save", run: () => this.saveActive() },
       {
@@ -98,6 +155,31 @@ export class WebIdeWorkbench {
         id: "toggle-panel",
         label: "View: Toggle Panel",
         run: () => this.togglePanel(),
+      },
+      {
+        id: "compile",
+        label: "INTERLIS: Compile Model",
+        run: () => this.compileWorkspace(),
+      },
+      {
+        id: "diagram",
+        label: "INTERLIS: Show Live Diagram",
+        run: () => this.showDiagram(),
+      },
+      {
+        id: "diagram-refresh",
+        label: "INTERLIS: Refresh Diagram / Auto-layout",
+        run: () => this.showDiagram(true),
+      },
+      {
+        id: "export-svg",
+        label: "INTERLIS: Export Diagram as SVG",
+        run: () => this.exportSvg(),
+      },
+      {
+        id: "export-docx",
+        label: "INTERLIS: Export Documentation as DOCX",
+        run: () => this.exportDocx(),
       },
       {
         id: "theme",
@@ -132,11 +214,31 @@ export class WebIdeWorkbench {
     });
     this.#bindUi();
     await this.#ensureInitialContent();
+    await this.#syncWorkspaceSources();
     await this.#restoreRecovery();
     if (!this.#activePath) await this.#openFirstInterlisFile();
     await this.renderSidebar();
     this.#updateWorkspaceStatus();
     this.#log("OPFS workspace and recovery services are ready.");
+    this.#required("#diagram-host").classList.remove("hidden");
+    this.#renderDiagramStatus("Analyzing the current workspace…");
+  }
+
+  async publishAnalysis(
+    result: VersionedResult<SemanticSnapshot>,
+  ): Promise<void> {
+    if (!result.value) return;
+    this.#diagram.publish(
+      result.value,
+      result.freshness === "fresh" ? "fresh" : "stale",
+    );
+    if (this.#diagramVisible) await this.#renderDiagram();
+  }
+
+  logError(operation: string, error: unknown): void {
+    this.#log(
+      `${operation} failed: ${error instanceof Error ? error.message : String(error)}`,
+    );
   }
 
   setSourceControlRenderer(
@@ -175,13 +277,17 @@ export class WebIdeWorkbench {
     let tab = this.#tabs.get(normalized);
     if (!tab) {
       const content = fileText(await this.#workspace.read(normalized));
-      const uri = monaco.Uri.parse(
-        `opfs://${this.manager.activeDescriptor?.id ?? "workspace"}${normalized}`,
-      );
+      const uri = monaco.Uri.parse(this.#modelUri(normalized));
       const model =
         monaco.editor.getModel(uri) ??
         monaco.editor.createModel(content, "interlis", uri);
-      tab = { path: normalized, model, dirty: false, recoveryTimer: null };
+      tab = {
+        path: normalized,
+        model,
+        dirty: false,
+        recoveryTimer: null,
+        language: this.languageAdapter.attachModel(model),
+      };
       this.#tabs.set(normalized, tab);
       model.onDidChangeContent(() => this.#onModelChanged(tab!));
     }
@@ -231,13 +337,23 @@ export class WebIdeWorkbench {
     content.replaceChildren(...next.childNodes);
   }
 
-  async newFile(): Promise<void> {
+  async newFile(content = sampleModel): Promise<void> {
     let index = 1;
     let path = `/Untitled-${index}.ili`;
     while (await this.#exists(path)) path = `/Untitled-${++index}.ili`;
-    await this.#workspace.write(path, textFile(sampleModel));
+    await this.#workspace.write(path, textFile(""));
     await this.openFile(path);
+    this.#tabs.get(path)?.model.setValue(content);
     await this.renderSidebar();
+  }
+
+  async newFromRemoteTemplate(): Promise<void> {
+    try {
+      await this.newFile(await fetchTemplate(undefined));
+      this.#log("Opened a new unsaved document from the remote template.");
+    } catch (error) {
+      this.logError("Remote template", error);
+    }
   }
 
   async openLocalFolder(): Promise<void> {
@@ -278,6 +394,87 @@ export class WebIdeWorkbench {
     this.#log("Exported workspace ZIP.");
   }
 
+  async compileWorkspace(): Promise<void> {
+    const active = this.#activePath ? this.#tabs.get(this.#activePath) : null;
+    if (!active || isBlankInterlisDocument(active.model.getValue())) {
+      this.#log("Compile skipped: the active INTERLIS document is blank.");
+      return;
+    }
+    await this.#syncWorkspaceSources();
+    const result = this.languageService.compile();
+    this.#required("#problem-count").textContent = String(result.errorCount);
+    this.#log(
+      `Compile ${result.success ? "succeeded" : "failed"}: ${result.errorCount} error(s), ${result.warningCount} warning(s).`,
+    );
+    for (const diagnostic of result.diagnostics)
+      this.#log(
+        `${diagnostic.severity.toUpperCase()} ${diagnostic.code}: ${diagnostic.message}`,
+      );
+    for (const entry of result.logs)
+      this.#log(
+        `${entry.level.toUpperCase()} [${entry.category}] ${entry.message}`,
+      );
+  }
+
+  async showDiagram(force = false): Promise<void> {
+    this.#diagramVisible = true;
+    if (this.#secondary) {
+      this.#secondary.dispose();
+      this.#secondary = null;
+      this.#required("#editor-secondary").classList.add("hidden");
+    }
+    this.#required("#diagram-host").classList.remove("hidden");
+    this.#renderDiagramStatus("Updating diagram…");
+    if (force || !this.languageService.getSemanticSnapshot()?.value)
+      await this.languageService.analyzeNow(this.#activeDocumentUri());
+    await this.#renderDiagram();
+  }
+
+  async exportSvg(): Promise<void> {
+    if (!this.#diagramSvg) await this.showDiagram(true);
+    if (!this.#diagramSvg) {
+      this.#log("SVG export skipped: no valid diagram is available.");
+      return;
+    }
+    const name = `${this.#activeBaseName()}.svg`;
+    downloadBytes(
+      new TextEncoder().encode(this.#diagramSvg),
+      name,
+      "image/svg+xml",
+    );
+    this.#log(`Exported ${name}.`);
+  }
+
+  async exportDocx(): Promise<void> {
+    let result = this.languageService.getSemanticSnapshot();
+    if (!result?.value) result = await this.languageService.analyzeNow();
+    const snapshot = result.value;
+    if (!snapshot) {
+      this.#log("DOCX export skipped: no semantic snapshot is available.");
+      return;
+    }
+    const bytes = await generateDocx(snapshot, { includeDiagnostics: true });
+    const name = `${this.#activeBaseName()}.docx`;
+    if (this.manager.activeDescriptor?.kind === "local-folder") {
+      const path = normalizePath(
+        `${this.#activePath?.replace(/[^/]+$/u, "") ?? "/"}${name}`,
+      );
+      await this.#workspace.write(path, bytes, {
+        create: true,
+        overwrite: true,
+      });
+      await this.renderSidebar();
+      this.#log(`Wrote ${path}.`);
+    } else {
+      downloadBytes(
+        bytes,
+        name,
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      );
+      this.#log(`Downloaded ${name}.`);
+    }
+  }
+
   private async newWorkspace(): Promise<void> {
     const descriptor = await this.manager.create(
       `Workspace ${this.manager.workspaces.length + 1}`,
@@ -292,9 +489,11 @@ export class WebIdeWorkbench {
 
   async #switchFileSystem(workspace: WorkspaceFileSystem): Promise<void> {
     this.#disposeTabs();
+    this.#resetLanguageDocuments();
     this.#workspace = workspace;
     this.#recovery = new BufferRecoveryStore(workspace);
     await this.#ensureInitialContent();
+    await this.#syncWorkspaceSources();
     await this.#openFirstInterlisFile();
     await this.renderSidebar();
     this.#updateWorkspaceStatus();
@@ -337,6 +536,7 @@ export class WebIdeWorkbench {
             this.#workspace,
             new Uint8Array(buffer),
           );
+          await this.#syncWorkspaceSources();
           this.#log(`Imported ${imported.length} file(s) from ZIP.`);
           await this.renderSidebar();
         });
@@ -459,21 +659,80 @@ export class WebIdeWorkbench {
   #renderSettings(host: HTMLElement): void {
     const heading = document.createElement("h3");
     heading.textContent = "Settings";
-    const values = [
+    host.append(heading);
+    const routing = document.createElement("select");
+    routing.setAttribute("aria-label", "Diagram edge routing");
+    for (const value of ["POLYLINE", "ORTHOGONAL", "SPLINES"] as const) {
+      const option = new Option(value, value);
+      option.selected = value === this.#diagramSettings.edgeRouting;
+      routing.add(option);
+    }
+    routing.addEventListener("change", () => {
+      this.#updateDiagramSettings({
+        edgeRouting: routing.value as DiagramSettings["edgeRouting"],
+      });
+    });
+    host.append(this.#settingRow("Diagram: Edge routing", routing));
+
+    const attributes = document.createElement("select");
+    attributes.setAttribute("aria-label", "Diagram attributes");
+    for (const value of ["OWN", "OWN_AND_INHERITED", "NONE"] as const) {
+      const option = new Option(value.replaceAll("_", " "), value);
+      option.selected = value === this.#diagramSettings.attributeMode;
+      attributes.add(option);
+    }
+    attributes.addEventListener("change", () => {
+      this.#updateDiagramSettings({
+        attributeMode: attributes.value as DiagramSettings["attributeMode"],
+      });
+    });
+    host.append(this.#settingRow("Diagram: Attributes", attributes));
+
+    const toggles: Array<[string, keyof DiagramSettings]> = [
+      ["De-emphasize abstract types", "deemphasizeAbstractTypes"],
+      ["Show association names", "showAssociationNames"],
+      ["Show role cardinalities", "showRoleCardinalities"],
+      ["Show local enum values", "showLocalEnumerationValues"],
+    ];
+    for (const [label, key] of toggles) {
+      const input = document.createElement("input");
+      input.type = "checkbox";
+      input.checked = Boolean(this.#diagramSettings[key]);
+      input.setAttribute("aria-label", `Diagram ${label}`);
+      input.addEventListener("change", () =>
+        this.#updateDiagramSettings({ [key]: input.checked }),
+      );
+      host.append(this.#settingRow(`Diagram: ${label}`, input));
+    }
+    for (const value of [
       "Editor: Font Size 14",
       "Editor: Format On Type",
       "Diagram: Auto Open",
       "Files: Auto Save Off",
-    ];
-    host.append(
-      heading,
-      ...values.map((value) =>
+    ]) {
+      host.append(
         Object.assign(document.createElement("div"), {
           className: "setting-row",
           textContent: value,
         }),
-      ),
+      );
+    }
+  }
+
+  #settingRow(label: string, control: HTMLElement): HTMLElement {
+    const row = document.createElement("label");
+    row.className = "setting-row setting-control";
+    row.append(document.createTextNode(label), control);
+    return row;
+  }
+
+  #updateDiagramSettings(changes: Partial<DiagramSettings>): void {
+    this.#diagramSettings = { ...this.#diagramSettings, ...changes };
+    localStorage.setItem(
+      diagramSettingsKey,
+      JSON.stringify(this.#diagramSettings),
     );
+    if (this.#diagramVisible) void this.#renderDiagram();
   }
 
   #renderScmPlaceholder(host: HTMLElement): void {
@@ -509,7 +768,161 @@ export class WebIdeWorkbench {
         tab.model.getValue(),
       );
     }, 250);
+    if (tab.path === this.#activePath) {
+      const position = this.#primary.getPosition();
+      if (position) {
+        const activation = this.languageAdapter.suggestionActivation(
+          tab.model,
+          position,
+        );
+        if (activation.open)
+          this.#primary.trigger(
+            "interlis.suggestionActivation",
+            "editor.action.triggerSuggest",
+            null,
+          );
+        else if (activation.suppress)
+          this.#primary.trigger(
+            "interlis.suggestionActivation",
+            "hideSuggestWidget",
+            null,
+          );
+      }
+    }
     this.#renderOutline();
+  }
+
+  async #syncWorkspaceSources(path = "/"): Promise<void> {
+    for (const [name, type] of await this.#workspace.readDirectory(path)) {
+      if (name.startsWith(".")) continue;
+      const child = normalizePath(`${path}/${name}`);
+      if (type === "directory") {
+        await this.#syncWorkspaceSources(child);
+        continue;
+      }
+      if (!name.toLowerCase().endsWith(".ili")) continue;
+      const uri = this.#modelUri(child);
+      if (this.languageService.getDocument(uri)) continue;
+      this.languageService.openDocument(
+        uri,
+        fileText(await this.#workspace.read(child)),
+        0,
+      );
+    }
+  }
+
+  #resetLanguageDocuments(): void {
+    for (const document of [...this.languageService.documents])
+      this.languageService.closeDocument(document.uri);
+  }
+
+  async #renderDiagram(): Promise<void> {
+    const generation = ++this.#diagramGeneration;
+    const host = this.#required("#diagram-host");
+    const previous = host.querySelector<HTMLElement>(".diagram-viewport");
+    if (previous && this.#diagramLayout) {
+      this.#diagramViewport = captureViewport(this.#diagramLayout, {
+        zoom: 1,
+        scrollX: previous.scrollLeft,
+        scrollY: previous.scrollTop,
+        width: Math.max(1, previous.clientWidth),
+        height: Math.max(1, previous.clientHeight),
+      });
+    }
+    const snapshot = this.#diagram.state.snapshot;
+    if (!snapshot) {
+      this.#renderDiagramStatus(this.#diagram.state.message);
+      return;
+    }
+    try {
+      const rendered = await layoutAndRenderDiagram(
+        snapshot.diagram,
+        this.#diagramSettings,
+      );
+      if (generation !== this.#diagramGeneration) return;
+      this.#diagramLayout = rendered.layout;
+      this.#diagramSvg = rendered.svg;
+      host.innerHTML = `<header class="diagram-toolbar"><span class="diagram-status"></span><button data-command="diagram-refresh">Auto-layout</button><button data-command="export-svg">SVG</button><button data-command="export-docx">DOCX</button></header><div class="diagram-viewport">${rendered.svg}</div>`;
+      const status = host.querySelector<HTMLElement>(".diagram-status");
+      if (status) {
+        status.textContent = this.#diagram.state.message;
+        status.dataset.state = this.#diagram.state.status;
+      }
+      const viewport = host.querySelector<HTMLElement>(".diagram-viewport");
+      if (viewport && this.#diagramViewport) {
+        const restored = restoreViewport(
+          rendered.layout,
+          this.#diagramViewport,
+          {
+            width: Math.max(1, viewport.clientWidth),
+            height: Math.max(1, viewport.clientHeight),
+          },
+        );
+        viewport.scrollTo(restored.scrollX, restored.scrollY);
+      }
+      viewport?.addEventListener("dblclick", (event) => {
+        const target =
+          event.target instanceof Element
+            ? event.target.closest<HTMLElement>("[data-symbol-id]")
+            : null;
+        if (target?.dataset.symbolId)
+          void this.#navigateToDiagramNode(target.dataset.symbolId);
+      });
+    } catch (error) {
+      this.#diagram.fail(
+        error instanceof Error ? error.message : String(error),
+      );
+      this.#renderDiagramStatus(this.#diagram.state.message);
+    }
+  }
+
+  #renderDiagramStatus(message: string): void {
+    const host = this.#required("#diagram-host");
+    host.innerHTML = `<header class="diagram-toolbar"><span class="diagram-status"></span><button data-command="diagram-refresh">Retry</button></header><div class="diagram-empty"></div>`;
+    const status = host.querySelector<HTMLElement>(".diagram-status");
+    const empty = host.querySelector<HTMLElement>(".diagram-empty");
+    if (status) status.textContent = message;
+    if (empty) empty.textContent = message;
+  }
+
+  async #navigateToDiagramNode(nodeId: string): Promise<void> {
+    const snapshot = this.#diagram.state.snapshot;
+    const range = snapshot ? sourceLocationForNode(snapshot, nodeId) : null;
+    if (!range) return;
+    let path: string;
+    try {
+      path = new URL(range.uri).pathname;
+    } catch {
+      return;
+    }
+    if (!(await this.#exists(path))) return;
+    await this.openFile(path);
+    const selection = {
+      startLineNumber: range.start.line + 1,
+      startColumn: range.start.character + 1,
+      endLineNumber: range.end.line + 1,
+      endColumn: range.end.character + 1,
+    };
+    this.#primary.setSelection(selection);
+    this.#primary.revealRangeInCenter(selection);
+    this.#primary.focus();
+  }
+
+  #modelUri(path: string): string {
+    return `opfs://${this.manager.activeDescriptor?.id ?? "workspace"}${normalizePath(path)}`;
+  }
+
+  #activeDocumentUri(): string | undefined {
+    return this.#activePath ? this.#modelUri(this.#activePath) : undefined;
+  }
+
+  #activeBaseName(): string {
+    return (
+      this.#activePath
+        ?.split("/")
+        .at(-1)
+        ?.replace(/\.ili$/iu, "") ?? "interlis-model"
+    );
   }
 
   async #ensureInitialContent(): Promise<void> {
@@ -605,6 +1018,8 @@ export class WebIdeWorkbench {
       host.classList.add("hidden");
       return;
     }
+    this.#diagramVisible = false;
+    this.#required("#diagram-host").classList.add("hidden");
     host.classList.remove("hidden");
     this.#secondary = monaco.editor.create(host, {
       model: this.#primary.getModel(),
@@ -629,6 +1044,7 @@ export class WebIdeWorkbench {
     this.#secondary?.setModel(null);
     for (const tab of this.#tabs.values()) {
       if (tab.recoveryTimer) clearTimeout(tab.recoveryTimer);
+      tab.language.dispose();
       tab.model.dispose();
     }
     this.#tabs.clear();

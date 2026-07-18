@@ -3,6 +3,16 @@ import { VitePWA } from "vite-plugin-pwa";
 
 export default defineConfig({
   base: "/interlis-web-ide/",
+  // Emscripten resolves ilic.wasm relative to its generated module. Keeping the
+  // module out of Vite's dev-only dependency bundle preserves that URL; the
+  // production build rewrites it to the hashed asset automatically.
+  optimizeDeps: {
+    exclude: [
+      "@ilic/compiler-wasm",
+      "@ilic/language-service",
+      "@ilic/monaco-adapter",
+    ],
+  },
   plugins: [
     VitePWA({
       registerType: "autoUpdate",
@@ -38,6 +48,6 @@ export default defineConfig({
   },
   build: {
     target: "es2022",
-    sourcemap: true,
+    sourcemap: false,
   },
 });

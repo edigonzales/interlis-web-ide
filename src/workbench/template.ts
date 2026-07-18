@@ -25,7 +25,7 @@ export const workbenchTemplate = `
       <main class="editor-group">
         <div class="tabs" id="tabs"></div>
         <div class="breadcrumbs" id="breadcrumbs">No file open</div>
-        <div class="editor-grid"><div id="editor-primary" class="editor-host"></div><div id="editor-secondary" class="editor-host hidden"></div></div>
+        <div class="editor-grid"><div id="editor-primary" class="editor-host"></div><div id="editor-secondary" class="editor-host hidden"></div><section id="diagram-host" class="diagram-host hidden" aria-label="Live INTERLIS diagram"></section></div>
         <section class="panel" id="panel">
           <header><button class="active">PROBLEMS <span id="problem-count">0</span></button><button>OUTPUT</button><span></span><button data-command="toggle-panel">×</button></header>
           <pre id="output">INTERLIS Web IDE ready.</pre>
