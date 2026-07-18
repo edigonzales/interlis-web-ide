@@ -26,6 +26,7 @@
     "typescript": "^5.9.3",
     "typescript-eslint": "^8.50.1",
     "vite": "^7.3.0",
+    "vite-plugin-pwa": "1.3.0",
     "vitest": "^4.0.16"
   },
   "dependencies": {
@@ -35,7 +36,10 @@
     "@codingame/monaco-vscode-keybindings-service-override": "35.0.1",
     "@codingame/monaco-vscode-quickaccess-service-override": "35.0.1",
     "@codingame/monaco-vscode-search-service-override": "35.0.1",
+    "buffer": "6.0.3",
     "fflate": "^0.8.2",
-    "monaco-editor": "npm:@codingame/monaco-vscode-editor-api@35.0.1"
+    "isomorphic-git": "1.38.7",
+    "monaco-editor": "npm:@codingame/monaco-vscode-editor-api@35.0.1",
+    "workbox-window": "7.4.1"
   }
 }

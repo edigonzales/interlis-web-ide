@@ -1,4 +1,6 @@
 import "./style.css";
+import { registerSW } from "virtual:pwa-register";
+import { GitPanel } from "./git/index.js";
 import { initializeVscodeServices } from "./vscode-services.js";
 import { openOpfsRoot, WorkspaceManager } from "./workspace/index.js";
 import { WebIdeWorkbench } from "./workbench/workbench.js";
@@ -13,6 +15,18 @@ async function start(): Promise<void> {
   await manager.initialize();
   const workbench = new WebIdeWorkbench(app!, manager);
   await workbench.initialize();
+  const sourceControl = new GitPanel(workbench, window.localStorage);
+  await sourceControl.refreshStatus();
+  registerSW({
+    immediate: true,
+    onOfflineReady: () => {
+      workbench.output.textContent +=
+        "\nINTERLIS Web IDE is cached and ready for offline use.";
+    },
+    onRegisterError: (error) => {
+      workbench.output.textContent += `\nOffline cache registration failed: ${String(error)}`;
+    },
+  });
 }
 
 start().catch((error: unknown) => {

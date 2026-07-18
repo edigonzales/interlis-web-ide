@@ -45,12 +45,16 @@ export class WebIdeWorkbench {
   readonly #tabs = new Map<string, OpenTab>();
   readonly #handleStore = new DirectoryHandleStore();
   readonly #commands: Command[];
+  readonly #workspaceListeners = new Set<() => void>();
   #workspace: WorkspaceFileSystem;
   #recovery: BufferRecoveryStore;
   #primary!: editor.IStandaloneCodeEditor;
   #secondary: editor.IStandaloneCodeEditor | null = null;
   #activePath: string | null = null;
   #activeView = "explorer";
+  #sidebarGeneration = 0;
+  #sourceControlRenderer: (() => HTMLElement | Promise<HTMLElement>) | null =
+    null;
 
   constructor(
     private readonly host: HTMLElement,
@@ -138,13 +142,12 @@ export class WebIdeWorkbench {
   setSourceControlRenderer(
     renderer: () => HTMLElement | Promise<HTMLElement>,
   ): void {
-    const command = this.host.querySelector<HTMLElement>('[data-view="scm"]');
-    command?.addEventListener("click", () => {
-      void Promise.resolve(renderer()).then((content) => {
-        const host = this.#required("#sidebar-content");
-        host.replaceChildren(content);
-      });
-    });
+    this.#sourceControlRenderer = renderer;
+  }
+
+  onWorkspaceChanged(listener: () => void): { dispose(): void } {
+    this.#workspaceListeners.add(listener);
+    return { dispose: () => this.#workspaceListeners.delete(listener) };
   }
 
   get activeWorkspace(): WorkspaceFileSystem {
@@ -152,6 +155,19 @@ export class WebIdeWorkbench {
   }
   get output(): HTMLElement {
     return this.#required("#output");
+  }
+  get hasDirtyBuffers(): boolean {
+    return [...this.#tabs.values()].some((tab) => tab.dirty);
+  }
+
+  setGitStatus(status: string): void {
+    this.#required("#git-status").textContent = status;
+  }
+
+  async reloadWorkspace(): Promise<void> {
+    this.#disposeTabs();
+    await this.#openFirstInterlisFile();
+    await this.renderSidebar();
   }
 
   async openFile(path: string): Promise<void> {
@@ -196,15 +212,23 @@ export class WebIdeWorkbench {
   }
 
   async renderSidebar(): Promise<void> {
+    const generation = ++this.#sidebarGeneration;
+    const activeView = this.#activeView;
     const title = this.#required("#sidebar-title");
     const content = this.#required("#sidebar-content");
-    title.textContent = this.#activeView.toUpperCase();
-    content.replaceChildren();
-    if (this.#activeView === "explorer") await this.#renderExplorer(content);
-    else if (this.#activeView === "search") this.#renderSearch(content);
-    else if (this.#activeView === "outline") this.#renderOutline(content);
-    else if (this.#activeView === "settings") this.#renderSettings(content);
-    else if (this.#activeView === "scm") this.#renderScmPlaceholder(content);
+    const next = document.createElement("div");
+    if (activeView === "explorer") await this.#renderExplorer(next);
+    else if (activeView === "search") this.#renderSearch(next);
+    else if (activeView === "outline") this.#renderOutline(next);
+    else if (activeView === "settings") this.#renderSettings(next);
+    else if (activeView === "scm") {
+      if (this.#sourceControlRenderer)
+        next.append(await this.#sourceControlRenderer());
+      else this.#renderScmPlaceholder(next);
+    }
+    if (generation !== this.#sidebarGeneration) return;
+    title.textContent = activeView.toUpperCase();
+    content.replaceChildren(...next.childNodes);
   }
 
   async newFile(): Promise<void> {
@@ -271,8 +295,10 @@ export class WebIdeWorkbench {
     this.#workspace = workspace;
     this.#recovery = new BufferRecoveryStore(workspace);
     await this.#ensureInitialContent();
+    await this.#openFirstInterlisFile();
     await this.renderSidebar();
     this.#updateWorkspaceStatus();
+    for (const listener of this.#workspaceListeners) listener();
   }
 
   #bindUi(): void {
