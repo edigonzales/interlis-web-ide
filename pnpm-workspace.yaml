@@ -3,8 +3,8 @@ allowBuilds:
 onlyBuiltDependencies:
   - esbuild
 overrides:
-  "@ilic/compiler-wasm": file:../interlis-language-tools/artifacts/npm/ilic-compiler-wasm-0.10.0.tgz
-  "@ilic/diagram": file:../interlis-language-tools/artifacts/npm/ilic-diagram-1.0.0-rc.1.tgz
-  "@ilic/docx": file:../interlis-language-tools/artifacts/npm/ilic-docx-1.0.0-rc.1.tgz
-  "@ilic/language-service": file:../interlis-language-tools/artifacts/npm/ilic-language-service-1.0.0-rc.1.tgz
-  "@ilic/monaco-adapter": file:../interlis-language-tools/artifacts/npm/ilic-monaco-adapter-1.0.0-rc.1.tgz
+  "@ilic/compiler-wasm": file:../interlis-language-tools/artifacts/npm/ilic-compiler-wasm-snapshot.tgz
+  "@ilic/diagram": file:../interlis-language-tools/artifacts/npm/ilic-diagram-snapshot.tgz
+  "@ilic/docx": file:../interlis-language-tools/artifacts/npm/ilic-docx-snapshot.tgz
+  "@ilic/language-service": file:../interlis-language-tools/artifacts/npm/ilic-language-service-snapshot.tgz
+  "@ilic/monaco-adapter": file:../interlis-language-tools/artifacts/npm/ilic-monaco-adapter-snapshot.tgz

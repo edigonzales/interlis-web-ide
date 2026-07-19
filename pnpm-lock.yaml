@@ -5,11 +5,11 @@ settings:
   excludeLinksFromLockfile: false
 
 overrides:
-  '@ilic/compiler-wasm': file:../interlis-language-tools/artifacts/npm/ilic-compiler-wasm-0.10.0.tgz
-  '@ilic/diagram': file:../interlis-language-tools/artifacts/npm/ilic-diagram-1.0.0-rc.1.tgz
-  '@ilic/docx': file:../interlis-language-tools/artifacts/npm/ilic-docx-1.0.0-rc.1.tgz
-  '@ilic/language-service': file:../interlis-language-tools/artifacts/npm/ilic-language-service-1.0.0-rc.1.tgz
-  '@ilic/monaco-adapter': file:../interlis-language-tools/artifacts/npm/ilic-monaco-adapter-1.0.0-rc.1.tgz
+  '@ilic/compiler-wasm': file:../interlis-language-tools/artifacts/npm/ilic-compiler-wasm-snapshot.tgz
+  '@ilic/diagram': file:../interlis-language-tools/artifacts/npm/ilic-diagram-snapshot.tgz
+  '@ilic/docx': file:../interlis-language-tools/artifacts/npm/ilic-docx-snapshot.tgz
+  '@ilic/language-service': file:../interlis-language-tools/artifacts/npm/ilic-language-service-snapshot.tgz
+  '@ilic/monaco-adapter': file:../interlis-language-tools/artifacts/npm/ilic-monaco-adapter-snapshot.tgz
 
 importers:
 
@@ -34,17 +34,17 @@ importers:
         specifier: 35.0.1
         version: 35.0.1
       '@ilic/diagram':
-        specifier: file:../interlis-language-tools/artifacts/npm/ilic-diagram-1.0.0-rc.1.tgz
-        version: file:../interlis-language-tools/artifacts/npm/ilic-diagram-1.0.0-rc.1.tgz(reflect-metadata@0.2.2)
+        specifier: file:../interlis-language-tools/artifacts/npm/ilic-diagram-snapshot.tgz
+        version: file:../interlis-language-tools/artifacts/npm/ilic-diagram-snapshot.tgz(reflect-metadata@0.2.2)
       '@ilic/docx':
-        specifier: file:../interlis-language-tools/artifacts/npm/ilic-docx-1.0.0-rc.1.tgz
-        version: file:../interlis-language-tools/artifacts/npm/ilic-docx-1.0.0-rc.1.tgz
+        specifier: file:../interlis-language-tools/artifacts/npm/ilic-docx-snapshot.tgz
+        version: file:../interlis-language-tools/artifacts/npm/ilic-docx-snapshot.tgz
       '@ilic/language-service':
-        specifier: file:../interlis-language-tools/artifacts/npm/ilic-language-service-1.0.0-rc.1.tgz
-        version: file:../interlis-language-tools/artifacts/npm/ilic-language-service-1.0.0-rc.1.tgz
+        specifier: file:../interlis-language-tools/artifacts/npm/ilic-language-service-snapshot.tgz
+        version: file:../interlis-language-tools/artifacts/npm/ilic-language-service-snapshot.tgz
       '@ilic/monaco-adapter':
-        specifier: file:../interlis-language-tools/artifacts/npm/ilic-monaco-adapter-1.0.0-rc.1.tgz
-        version: file:../interlis-language-tools/artifacts/npm/ilic-monaco-adapter-1.0.0-rc.1.tgz
+        specifier: file:../interlis-language-tools/artifacts/npm/ilic-monaco-adapter-snapshot.tgz
+        version: file:../interlis-language-tools/artifacts/npm/ilic-monaco-adapter-snapshot.tgz
       buffer:
         specifier: 6.0.3
         version: 6.0.3
@@ -858,29 +858,29 @@ packages:
     resolution: {integrity: sha512-bV0Tgo9K4hfPCek+aMAn81RppFKv2ySDQeMoSZuvTASywNTnVJCArCZE2FWqpvIatKu7VMRLWlR1EazvVhDyhQ==}
     engines: {node: '>=18.18'}
 
-  '@ilic/compiler-wasm@file:../interlis-language-tools/artifacts/npm/ilic-compiler-wasm-0.10.0.tgz':
-    resolution: {integrity: sha512-koJj2hE2kjXypgBsstEyhJS2rsg4LlsCAO+TauF5/76dbDyltol0Rzwjjauri+a/+vTMQlUzvWt0BEi8CRWjtg==, tarball: file:../interlis-language-tools/artifacts/npm/ilic-compiler-wasm-0.10.0.tgz}
-    version: 0.10.0
+  '@ilic/compiler-wasm@file:../interlis-language-tools/artifacts/npm/ilic-compiler-wasm-snapshot.tgz':
+    resolution: {integrity: sha512-rTxEzOlBpBY3381fPbOsZlWcX7ezkvEFa1IjqKqtrRLk4eGXFxwxzRea5MpZtqXBvrFR4KBDbTILA8ttyw2VHQ==, tarball: file:../interlis-language-tools/artifacts/npm/ilic-compiler-wasm-snapshot.tgz}
+    version: 0.9.9-SNAPSHOT.20260101000000
     engines: {node: '>=18'}
 
-  '@ilic/diagram@file:../interlis-language-tools/artifacts/npm/ilic-diagram-1.0.0-rc.1.tgz':
-    resolution: {integrity: sha512-HsWl1TWOjIHz1Gxy6va4WnK1Ikf0alMOt2TQ/X3vAseLL42E0FH9LopvtaZQ3XS9ghIK9M+wGK+KoCbZeCOMYg==, tarball: file:../interlis-language-tools/artifacts/npm/ilic-diagram-1.0.0-rc.1.tgz}
-    version: 1.0.0-rc.1
+  '@ilic/diagram@file:../interlis-language-tools/artifacts/npm/ilic-diagram-snapshot.tgz':
+    resolution: {integrity: sha512-Bfb0iBv+XutaBmXVCPHIapFpaLRmQhN78q8kd4ONZeo1uaLb6JDD6JKJGdVVYRDWnlPzlsa7EOzIiFcZfUpBWg==, tarball: file:../interlis-language-tools/artifacts/npm/ilic-diagram-snapshot.tgz}
+    version: 0.1.0-SNAPSHOT.20260101000000
     engines: {node: '>=18'}
 
-  '@ilic/docx@file:../interlis-language-tools/artifacts/npm/ilic-docx-1.0.0-rc.1.tgz':
-    resolution: {integrity: sha512-hFdun95H6xW7rxVl56RABYYaZff7w67+sv3PvJEb0brZxijXxoSWtXl4b9LojfXOo+pJ1QPJVrdWTkQ5QVQP8A==, tarball: file:../interlis-language-tools/artifacts/npm/ilic-docx-1.0.0-rc.1.tgz}
-    version: 1.0.0-rc.1
+  '@ilic/docx@file:../interlis-language-tools/artifacts/npm/ilic-docx-snapshot.tgz':
+    resolution: {integrity: sha512-sw8n8BWfaDjNv0rZN+lWWi2M6pmZ8nVvrcN9bYxe2D8tWW6hNOReyYoq1DJszpfK2Gix5PTeoZ/9i+4s/ohosA==, tarball: file:../interlis-language-tools/artifacts/npm/ilic-docx-snapshot.tgz}
+    version: 0.1.0-SNAPSHOT.20260101000000
     engines: {node: '>=18'}
 
-  '@ilic/language-service@file:../interlis-language-tools/artifacts/npm/ilic-language-service-1.0.0-rc.1.tgz':
-    resolution: {integrity: sha512-5AQqhKwnO+bD1YJMuzeFwIP2ky+nC0C8hKZenNwQ0KFybs4XvfBz55Ti9+Gx70PfRHNSAzQDgwjDajpX5A3MtQ==, tarball: file:../interlis-language-tools/artifacts/npm/ilic-language-service-1.0.0-rc.1.tgz}
-    version: 1.0.0-rc.1
+  '@ilic/language-service@file:../interlis-language-tools/artifacts/npm/ilic-language-service-snapshot.tgz':
+    resolution: {integrity: sha512-oWWKjECx6vlz/32m8NnlmbU9UrHuJjtj3Pm9E7Iv74h2cbnPveoStxo6YU6t4+oceICV7hweiBAmeQ0GS205Sg==, tarball: file:../interlis-language-tools/artifacts/npm/ilic-language-service-snapshot.tgz}
+    version: 0.1.0-SNAPSHOT.20260101000000
     engines: {node: '>=18'}
 
-  '@ilic/monaco-adapter@file:../interlis-language-tools/artifacts/npm/ilic-monaco-adapter-1.0.0-rc.1.tgz':
-    resolution: {integrity: sha512-HT5mr88sjzKwLIlpGAu8l7m+AiO77hTjvQIu4HPHUwfBnNBXV25Ysu+h5mATrWQoR8cYym3AhDO3NLpgTRFEIQ==, tarball: file:../interlis-language-tools/artifacts/npm/ilic-monaco-adapter-1.0.0-rc.1.tgz}
-    version: 1.0.0-rc.1
+  '@ilic/monaco-adapter@file:../interlis-language-tools/artifacts/npm/ilic-monaco-adapter-snapshot.tgz':
+    resolution: {integrity: sha512-LjMh2xpboJUUV3NLr0J/rAW9QwlX3fIVf/8A6CqABmtDi5KH0P5E9sQfE0Y5TvHTTES93P/+MojbiIvoDiqscA==, tarball: file:../interlis-language-tools/artifacts/npm/ilic-monaco-adapter-snapshot.tgz}
+    version: 0.1.0-SNAPSHOT.20260101000000
     engines: {node: '>=18'}
 
   '@inversifyjs/common@1.4.0':
@@ -3643,29 +3643,29 @@ snapshots:
 
   '@humanwhocodes/retry@0.4.3': {}
 
-  '@ilic/compiler-wasm@file:../interlis-language-tools/artifacts/npm/ilic-compiler-wasm-0.10.0.tgz': {}
+  '@ilic/compiler-wasm@file:../interlis-language-tools/artifacts/npm/ilic-compiler-wasm-snapshot.tgz': {}
 
-  '@ilic/diagram@file:../interlis-language-tools/artifacts/npm/ilic-diagram-1.0.0-rc.1.tgz(reflect-metadata@0.2.2)':
+  '@ilic/diagram@file:../interlis-language-tools/artifacts/npm/ilic-diagram-snapshot.tgz(reflect-metadata@0.2.2)':
     dependencies:
-      '@ilic/language-service': file:../interlis-language-tools/artifacts/npm/ilic-language-service-1.0.0-rc.1.tgz
+      '@ilic/language-service': file:../interlis-language-tools/artifacts/npm/ilic-language-service-snapshot.tgz
       elkjs: 0.11.1
       sprotty: 1.4.0(reflect-metadata@0.2.2)
       sprotty-protocol: 1.4.0
     transitivePeerDependencies:
       - reflect-metadata
 
-  '@ilic/docx@file:../interlis-language-tools/artifacts/npm/ilic-docx-1.0.0-rc.1.tgz':
+  '@ilic/docx@file:../interlis-language-tools/artifacts/npm/ilic-docx-snapshot.tgz':
     dependencies:
-      '@ilic/language-service': file:../interlis-language-tools/artifacts/npm/ilic-language-service-1.0.0-rc.1.tgz
+      '@ilic/language-service': file:../interlis-language-tools/artifacts/npm/ilic-language-service-snapshot.tgz
       docx: 9.7.1
 
-  '@ilic/language-service@file:../interlis-language-tools/artifacts/npm/ilic-language-service-1.0.0-rc.1.tgz':
+  '@ilic/language-service@file:../interlis-language-tools/artifacts/npm/ilic-language-service-snapshot.tgz':
     dependencies:
-      '@ilic/compiler-wasm': file:../interlis-language-tools/artifacts/npm/ilic-compiler-wasm-0.10.0.tgz
+      '@ilic/compiler-wasm': file:../interlis-language-tools/artifacts/npm/ilic-compiler-wasm-snapshot.tgz
 
-  '@ilic/monaco-adapter@file:../interlis-language-tools/artifacts/npm/ilic-monaco-adapter-1.0.0-rc.1.tgz':
+  '@ilic/monaco-adapter@file:../interlis-language-tools/artifacts/npm/ilic-monaco-adapter-snapshot.tgz':
     dependencies:
-      '@ilic/language-service': file:../interlis-language-tools/artifacts/npm/ilic-language-service-1.0.0-rc.1.tgz
+      '@ilic/language-service': file:../interlis-language-tools/artifacts/npm/ilic-language-service-snapshot.tgz
 
   '@inversifyjs/common@1.4.0': {}
 

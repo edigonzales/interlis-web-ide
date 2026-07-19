@@ -71,6 +71,13 @@ corepack pnpm check
 corepack pnpm e2e
 ```
 
+Die lokalen Overrides verwenden stabile Dateinamen wie
+`ilic-language-service-snapshot.tgz`. Die darin enthaltenen Paketmanifeste und
+das Lockfile halten trotzdem die vollständigen unveränderlichen Versionen
+`0.1.0-SNAPSHOT.<UTC-Zeitstempel>` beziehungsweise
+`0.9.9-SNAPSHOT.<UTC-Zeitstempel>` fest. Dadurch erfordert ein neuer
+Cross-Repository-Snapshot keine manuelle Pfadanpassung.
+
 `pnpm dev` startet die lokale Entwicklung. `pnpm preview` prüft den erzeugten
 Pages-/PWA-Build. Node 22 und pnpm 11.14 sind festgelegt.
 
