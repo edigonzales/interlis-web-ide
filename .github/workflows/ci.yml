@@ -56,17 +56,64 @@ jobs:
         working-directory: interlis-web-ide
       - run: pnpm check
         working-directory: interlis-web-ide
-      - run: pnpm exec playwright install --with-deps chromium firefox webkit
+      - name: Upload browser runtime
+        uses: actions/upload-artifact@v6
+        with:
+          name: interlis-web-ide-runtime-${{ github.sha }}
+          path: |
+            interlis-web-ide/dist
+            interlis-language-tools/artifacts/npm/*.tgz
+          if-no-files-found: error
+          retention-days: 14
+      - run: pnpm exec playwright install --with-deps chromium firefox
         working-directory: interlis-web-ide
-      - run: pnpm e2e
+      - run: pnpm e2e --project chromium --project firefox
         working-directory: interlis-web-ide
       - uses: actions/upload-artifact@v6
         if: always()
         with:
-          name: interlis-web-ide-${{ github.sha }}
+          name: interlis-web-ide-linux-e2e-${{ github.sha }}
           path: |
-            interlis-web-ide/dist
             interlis-web-ide/playwright-report
             interlis-web-ide/test-results
-          if-no-files-found: error
+          if-no-files-found: ignore
+          retention-days: 14
+
+  webkit:
+    needs: verify
+    runs-on: macos-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          path: interlis-web-ide
+          persist-credentials: false
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.14.0
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+          cache: pnpm
+          cache-dependency-path: interlis-web-ide/pnpm-lock.yaml
+      - uses: actions/download-artifact@v7
+        with:
+          name: interlis-web-ide-runtime-${{ github.sha }}
+          path: .
+      - run: pnpm install --frozen-lockfile
+        working-directory: interlis-web-ide
+      - run: pnpm exec playwright install webkit
+        working-directory: interlis-web-ide
+      - run: pnpm e2e --project webkit
+        working-directory: interlis-web-ide
+        env:
+          PLAYWRIGHT_PREBUILT: "1"
+      - uses: actions/upload-artifact@v6
+        if: always()
+        with:
+          name: interlis-web-ide-webkit-e2e-${{ github.sha }}
+          path: |
+            interlis-web-ide/playwright-report
+            interlis-web-ide/test-results
+          if-no-files-found: ignore
           retention-days: 14

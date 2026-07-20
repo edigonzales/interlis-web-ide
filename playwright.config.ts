@@ -1,5 +1,7 @@
 import { defineConfig, devices } from "@playwright/test";
 
+const previewCommand = "pnpm preview --host 127.0.0.1 --port 4173 --strictPort";
+
 export default defineConfig({
   testDir: "./e2e",
   fullyParallel: false,
@@ -13,7 +15,9 @@ export default defineConfig({
   },
   webServer: {
     command:
-      "pnpm build && pnpm preview --host 127.0.0.1 --port 4173 --strictPort",
+      process.env.PLAYWRIGHT_PREBUILT === "1"
+        ? previewCommand
+        : `pnpm build && ${previewCommand}`,
     url: "http://127.0.0.1:4173/interlis-web-ide/",
     reuseExistingServer: !process.env.CI,
     timeout: 180_000,
