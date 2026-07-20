@@ -1,0 +1,76 @@
+name: Deploy GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          path: interlis-web-ide
+          persist-credentials: false
+      - uses: actions/checkout@v6
+        with:
+          repository: edigonzales/interlis-language-tools
+          path: interlis-language-tools
+          persist-credentials: false
+      - uses: actions/checkout@v6
+        with:
+          repository: edigonzales/ilic-fork
+          path: ilic-fork
+          persist-credentials: false
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.14.0
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+          cache: pnpm
+          cache-dependency-path: |
+            interlis-language-tools/pnpm-lock.yaml
+            interlis-web-ide/pnpm-lock.yaml
+      - name: Build pinned compiler WASM
+        shell: bash
+        working-directory: ilic-fork
+        run: |
+          set -euo pipefail
+          emscripten_version=$(tr -d '[:space:]' < .emscripten-version)
+          git clone --depth 1 https://github.com/emscripten-core/emsdk.git "$RUNNER_TEMP/emsdk"
+          "$RUNNER_TEMP/emsdk/emsdk" install "$emscripten_version"
+          "$RUNNER_TEMP/emsdk/emsdk" activate "$emscripten_version"
+          source "$RUNNER_TEMP/emsdk/emsdk_env.sh"
+          ./scripts/build-wasm.sh
+      - name: Build cross-repository npm tarballs
+        working-directory: interlis-language-tools
+        run: pnpm install --frozen-lockfile && pnpm pack:verify
+      - run: pnpm install --frozen-lockfile
+        working-directory: interlis-web-ide
+      - run: pnpm check
+        working-directory: interlis-web-ide
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v4
+        with:
+          path: interlis-web-ide/dist
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - name: Deploy
+        id: deployment
+        uses: actions/deploy-pages@v4

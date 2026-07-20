@@ -1,0 +1,65 @@
+name: Public clone smoke
+
+on:
+  schedule:
+    - cron: "17 4 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  clone:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          path: interlis-web-ide
+          persist-credentials: false
+      - uses: actions/checkout@v6
+        with:
+          repository: edigonzales/interlis-language-tools
+          path: interlis-language-tools
+          persist-credentials: false
+      - uses: actions/checkout@v6
+        with:
+          repository: edigonzales/ilic-fork
+          path: ilic-fork
+          persist-credentials: false
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.14.0
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+          cache: pnpm
+          cache-dependency-path: |
+            interlis-language-tools/pnpm-lock.yaml
+            interlis-web-ide/pnpm-lock.yaml
+      - name: Build pinned compiler WASM
+        shell: bash
+        working-directory: ilic-fork
+        run: |
+          set -euo pipefail
+          emscripten_version=$(tr -d '[:space:]' < .emscripten-version)
+          git clone --depth 1 https://github.com/emscripten-core/emsdk.git "$RUNNER_TEMP/emsdk"
+          "$RUNNER_TEMP/emsdk/emsdk" install "$emscripten_version"
+          "$RUNNER_TEMP/emsdk/emsdk" activate "$emscripten_version"
+          source "$RUNNER_TEMP/emsdk/emsdk_env.sh"
+          ./scripts/build-wasm.sh
+      - name: Build cross-repository npm tarballs
+        working-directory: interlis-language-tools
+        run: pnpm install --frozen-lockfile && pnpm pack:verify
+      - run: pnpm install --frozen-lockfile
+        working-directory: interlis-web-ide
+      - run: pnpm exec playwright install --with-deps chromium
+        working-directory: interlis-web-ide
+      - run: pnpm e2e:public-clone --project chromium
+        working-directory: interlis-web-ide
+      - uses: actions/upload-artifact@v6
+        if: failure()
+        with:
+          name: public-clone-failure-${{ github.sha }}
+          path: interlis-web-ide/test-results
+          if-no-files-found: ignore
