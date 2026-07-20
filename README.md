@@ -19,6 +19,8 @@ im Browser.
 - lokales Git mit öffentlichem HTTPS-Shallow-Clone, Status, Diff, Branches,
   Stage/Unstage und Commit;
 - installierbare PWA und Offline-Start nach dem ersten erfolgreichen Laden.
+- transitive Auflösung von `IMPORTS` aus Workspace und Modell-Repositories,
+  Repository-Completion sowie Ctrl-Klick in schreibgeschützte Modell-Tabs.
 
 Push, Pull, Fetch nach dem Clone, Authentifizierung, Accounts, Terminal,
 Debugger und Extension Marketplace sind bewusst nicht Bestandteil von Version
@@ -66,7 +68,7 @@ cd ../interlis-language-tools
 corepack pnpm install --frozen-lockfile
 corepack pnpm pack:verify
 cd ../interlis-web-ide
-corepack pnpm install --frozen-lockfile
+corepack pnpm install --force --update-checksums
 corepack pnpm check
 corepack pnpm e2e
 ```
@@ -80,6 +82,13 @@ Cross-Repository-Snapshot keine manuelle Pfadanpassung.
 
 `pnpm dev` startet die lokale Entwicklung. `pnpm preview` prüft den erzeugten
 Pages-/PWA-Build. Node 22 und pnpm 11.14 sind festgelegt.
+
+Die Settings-Ansicht speichert die Repository-Liste dauerhaft. Standard ist
+`%ILI_DIR;https://models.interlis.ch`; Workspace-Modelle haben Vorrang. Da die
+kanonischen Repository-Server noch kein geeignetes CORS anbieten, werden
+`models.interlis.ch` und `models.geo.admin.ch` im Browser vorübergehend auf die
+beiden CORS-Mirrors unter `geo.so.ch/models/mirror/` abgebildet. Ein bereits
+gefüllter Browser-Cache kann ohne Netzwerk verwendet werden.
 
 Compiler, Language Service und Monaco-Adapter bleiben im Vite-Dev-Modus bewusst
 vom Dependency-Prebundling ausgeschlossen: Das generierte Emscripten-Modul löst

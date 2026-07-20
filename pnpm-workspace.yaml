@@ -3,6 +3,7 @@ allowBuilds:
 onlyBuiltDependencies:
   - esbuild
 overrides:
+  "@ilic/tools": file:../interlis-language-tools/artifacts/npm/ilic-tools-snapshot.tgz
   "@ilic/compiler-wasm": file:../interlis-language-tools/artifacts/npm/ilic-compiler-wasm-snapshot.tgz
   "@ilic/diagram": file:../interlis-language-tools/artifacts/npm/ilic-diagram-snapshot.tgz
   "@ilic/docx": file:../interlis-language-tools/artifacts/npm/ilic-docx-snapshot.tgz

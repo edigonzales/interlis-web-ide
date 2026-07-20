@@ -5,6 +5,10 @@ import {
   createWasmCompilerBackend,
 } from "@ilic/language-service";
 import { registerInterlisMonaco } from "@ilic/monaco-adapter";
+import {
+  createBrowserModelRepository,
+  readRepositorySetting,
+} from "./language-repository.js";
 import { GitPanel } from "./git/index.js";
 import { initializeVscodeServices, monaco } from "./vscode-services.js";
 import { openOpfsRoot, WorkspaceManager } from "./workspace/index.js";
@@ -20,12 +24,19 @@ async function start(): Promise<void> {
   const compiler = await createWasmCompilerBackend();
   const workbenchRef: { current?: WebIdeWorkbench } = {};
   const languageService = new LanguageService(compiler, {
+    modelRepository: createBrowserModelRepository(
+      readRepositorySetting(),
+      (message) => workbenchRef.current?.logError("Model repository", message),
+    ),
     onAnalysis: ({ result }) =>
       void workbenchRef.current?.publishAnalysis(result),
     onError: (error) =>
       workbenchRef.current?.logError("Semantic analysis", error),
   });
-  const languageAdapter = registerInterlisMonaco(monaco, languageService);
+  const languageAdapter = registerInterlisMonaco(monaco, languageService, {
+    ensureModel: async (uri) =>
+      workbenchRef.current?.ensureRepositoryModel(uri),
+  });
   app!.textContent = "Opening browser workspace…";
   const opfs = await openOpfsRoot();
   const manager = new WorkspaceManager(opfs, window.sessionStorage);

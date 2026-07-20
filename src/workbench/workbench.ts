@@ -25,6 +25,12 @@ import type {
 } from "@ilic/monaco-adapter";
 import { monaco } from "../vscode-services.js";
 import {
+  createBrowserModelRepository,
+  defaultRepositorySetting,
+  readRepositorySetting,
+  repositorySettingsKey,
+} from "../language-repository.js";
+import {
   BufferRecoveryStore,
   DirectoryHandleStore,
   LocalFolderWorkspace,
@@ -44,7 +50,9 @@ import { workbenchTemplate } from "./template.js";
 
 interface OpenTab {
   readonly path: string;
+  readonly label: string;
   readonly model: editor.ITextModel;
+  readonly readOnly: boolean;
   dirty: boolean;
   recoveryTimer: ReturnType<typeof setTimeout> | null;
   readonly language: LanguageDisposable;
@@ -212,6 +220,36 @@ export class WebIdeWorkbench {
       this.#required("#cursor-status").textContent =
         `Ln ${event.position.lineNumber}, Col ${event.position.column}`;
     });
+    this.#primary.onDidChangeModel(() => {
+      const model = this.#primary.getModel();
+      const tab = model
+        ? [...this.#tabs.values()].find(
+            (candidate) => candidate.model === model,
+          )
+        : undefined;
+      if (tab && tab.path !== this.#activePath) this.#reflectActiveTab(tab);
+    });
+    monaco.editor.registerEditorOpener({
+      openCodeEditor: (_source, resource, selectionOrPosition) => {
+        const tab = this.#tabs.get(resource.toString());
+        if (!tab) return false;
+        this.#activateTab(tab);
+        if (selectionOrPosition) {
+          const position =
+            "startLineNumber" in selectionOrPosition
+              ? {
+                  lineNumber: selectionOrPosition.startLineNumber,
+                  column: selectionOrPosition.startColumn,
+                }
+              : selectionOrPosition;
+          if ("startLineNumber" in selectionOrPosition)
+            this.#primary.setSelection(selectionOrPosition);
+          else this.#primary.setPosition(selectionOrPosition);
+          this.#primary.revealPositionInCenter(position);
+        }
+        return true;
+      },
+    });
     this.#bindUi();
     await this.#ensureInitialContent();
     await this.#syncWorkspaceSources();
@@ -236,6 +274,7 @@ export class WebIdeWorkbench {
   }
 
   logError(operation: string, error: unknown): void {
+    console.error(`${operation} failed`, error);
     this.#log(
       `${operation} failed: ${error instanceof Error ? error.message : String(error)}`,
     );
@@ -259,7 +298,7 @@ export class WebIdeWorkbench {
     return this.#required("#output");
   }
   get hasDirtyBuffers(): boolean {
-    return [...this.#tabs.values()].some((tab) => tab.dirty);
+    return [...this.#tabs.values()].some((tab) => !tab.readOnly && tab.dirty);
   }
 
   setGitStatus(status: string): void {
@@ -283,7 +322,9 @@ export class WebIdeWorkbench {
         monaco.editor.createModel(content, "interlis", uri);
       tab = {
         path: normalized,
+        label: normalized.split("/").at(-1) ?? normalized,
         model,
+        readOnly: false,
         dirty: false,
         recoveryTimer: null,
         language: this.languageAdapter.attachModel(model),
@@ -291,21 +332,51 @@ export class WebIdeWorkbench {
       this.#tabs.set(normalized, tab);
       model.onDidChangeContent(() => this.#onModelChanged(tab!));
     }
-    this.#activePath = normalized;
-    this.#primary.setModel(tab.model);
-    if (this.#secondary) this.#secondary.setModel(tab.model);
-    this.#renderTabs();
-    this.#required("#breadcrumbs").textContent = normalized
-      .split("/")
-      .filter(Boolean)
-      .join("  ›  ");
-    this.#renderOutline();
+    this.#activateTab(tab);
+  }
+
+  ensureRepositoryModel(uri: string): Promise<void> {
+    const document = this.languageService.getRepositoryDocument(uri);
+    if (!document) return Promise.resolve();
+    this.languageService.prepareRepositoryDocument(uri);
+    let tab = this.#tabs.get(uri);
+    if (!tab) {
+      const modelUri = monaco.Uri.parse(uri);
+      const source =
+        typeof document.source === "string"
+          ? document.source
+          : new TextDecoder().decode(document.source);
+      const model =
+        monaco.editor.getModel(modelUri) ??
+        monaco.editor.createModel(source, "interlis", modelUri);
+      tab = {
+        path: uri,
+        label: `${document.model}.ili`,
+        model,
+        readOnly: true,
+        dirty: false,
+        recoveryTimer: null,
+        language: this.languageAdapter.attachModel(model, { readOnly: true }),
+      };
+      this.#tabs.set(uri, tab);
+      this.#renderTabs();
+    }
+    return Promise.resolve();
+  }
+
+  async openRepositoryModel(uri: string): Promise<void> {
+    await this.ensureRepositoryModel(uri);
+    const tab = this.#tabs.get(uri);
+    if (tab) this.#activateTab(tab);
   }
 
   async saveActive(): Promise<void> {
     if (!this.#activePath) return;
     const tab = this.#tabs.get(this.#activePath);
-    if (!tab) return;
+    if (!tab || tab.readOnly) {
+      if (tab?.readOnly) this.#log("Repository models are read-only.");
+      return;
+    }
     await this.#workspace.write(tab.path, textFile(tab.model.getValue()), {
       create: true,
       overwrite: true,
@@ -401,7 +472,7 @@ export class WebIdeWorkbench {
       return;
     }
     await this.#syncWorkspaceSources();
-    const result = this.languageService.compile();
+    const result = await this.languageService.compile();
     this.#required("#problem-count").textContent = String(result.errorCount);
     this.#log(
       `Compile ${result.success ? "succeeded" : "failed"}: ${result.errorCount} error(s), ${result.warningCount} warning(s).`,
@@ -660,6 +731,31 @@ export class WebIdeWorkbench {
     const heading = document.createElement("h3");
     heading.textContent = "Settings";
     host.append(heading);
+    const repositories = document.createElement("textarea");
+    repositories.setAttribute("aria-label", "Model repositories");
+    repositories.rows = 3;
+    repositories.value = readRepositorySetting();
+    repositories.placeholder = defaultRepositorySetting;
+    repositories.addEventListener("change", () => {
+      const value = repositories.value.trim() || defaultRepositorySetting;
+      repositories.value = value;
+      localStorage.setItem(repositorySettingsKey, value);
+      void this.languageService
+        .setModelRepository(
+          createBrowserModelRepository(value, (message) =>
+            this.logError("Model repository", message),
+          ),
+        )
+        .then(() => this.languageService.analyzeNow(this.#activeDocumentUri()));
+    });
+    host.append(this.#settingRow("INTERLIS model repositories", repositories));
+    host.append(
+      Object.assign(document.createElement("p"), {
+        className: "setting-help",
+        textContent:
+          "%ILI_DIR uses this workspace. Browser requests for models.interlis.ch and models.geo.admin.ch temporarily use the CORS mirrors at geo.so.ch.",
+      }),
+    );
     const routing = document.createElement("select");
     routing.setAttribute("aria-label", "Diagram edge routing");
     for (const value of ["POLYLINE", "ORTHOGONAL", "SPLINES"] as const) {
@@ -750,13 +846,35 @@ export class WebIdeWorkbench {
     for (const tab of this.#tabs.values()) {
       const button = document.createElement("button");
       button.className = tab.path === this.#activePath ? "tab active" : "tab";
-      button.textContent = `${tab.dirty ? "● " : ""}${tab.path.split("/").at(-1)}`;
-      button.addEventListener("click", () => void this.openFile(tab.path));
+      button.textContent = `${tab.dirty ? "● " : ""}${tab.readOnly ? "🔒 " : ""}${tab.label}`;
+      button.addEventListener("click", () => this.#activateTab(tab));
       host.append(button);
     }
   }
 
+  #activateTab(tab: OpenTab): void {
+    if (this.#primary.getModel() !== tab.model)
+      this.#primary.setModel(tab.model);
+    this.#reflectActiveTab(tab);
+    this.#primary.focus();
+  }
+
+  #reflectActiveTab(tab: OpenTab): void {
+    this.#activePath = tab.path;
+    this.#primary.updateOptions({ readOnly: tab.readOnly });
+    if (this.#secondary) {
+      this.#secondary.setModel(tab.model);
+      this.#secondary.updateOptions({ readOnly: tab.readOnly });
+    }
+    this.#required("#breadcrumbs").textContent = tab.readOnly
+      ? `Repository › ${tab.label}`
+      : tab.path.split("/").filter(Boolean).join(" › ");
+    this.#renderTabs();
+    this.#renderOutline();
+  }
+
   #onModelChanged(tab: OpenTab): void {
+    if (tab.readOnly) return;
     tab.dirty = true;
     this.#renderTabs();
     if (tab.recoveryTimer) clearTimeout(tab.recoveryTimer);
@@ -793,27 +911,34 @@ export class WebIdeWorkbench {
   }
 
   async #syncWorkspaceSources(path = "/"): Promise<void> {
+    const sources: Array<{ uri: string; text: string }> = [];
+    await this.#collectWorkspaceSources(path, sources);
+    this.languageService.replaceWorkspaceSources(sources);
+  }
+
+  async #collectWorkspaceSources(
+    path: string,
+    sources: Array<{ uri: string; text: string }>,
+  ): Promise<void> {
     for (const [name, type] of await this.#workspace.readDirectory(path)) {
       if (name.startsWith(".")) continue;
       const child = normalizePath(`${path}/${name}`);
       if (type === "directory") {
-        await this.#syncWorkspaceSources(child);
+        await this.#collectWorkspaceSources(child, sources);
         continue;
       }
       if (!name.toLowerCase().endsWith(".ili")) continue;
-      const uri = this.#modelUri(child);
-      if (this.languageService.getDocument(uri)) continue;
-      this.languageService.openDocument(
-        uri,
-        fileText(await this.#workspace.read(child)),
-        0,
-      );
+      sources.push({
+        uri: this.#modelUri(child),
+        text: fileText(await this.#workspace.read(child)),
+      });
     }
   }
 
   #resetLanguageDocuments(): void {
     for (const document of [...this.languageService.documents])
       this.languageService.closeDocument(document.uri);
+    this.languageService.replaceWorkspaceSources([]);
   }
 
   async #renderDiagram(): Promise<void> {
@@ -889,6 +1014,18 @@ export class WebIdeWorkbench {
     const snapshot = this.#diagram.state.snapshot;
     const range = snapshot ? sourceLocationForNode(snapshot, nodeId) : null;
     if (!range) return;
+    if (this.languageService.getRepositoryDocument(range.uri)) {
+      await this.openRepositoryModel(range.uri);
+      const selection = {
+        startLineNumber: range.start.line + 1,
+        startColumn: range.start.character + 1,
+        endLineNumber: range.end.line + 1,
+        endColumn: range.end.character + 1,
+      };
+      this.#primary.setSelection(selection);
+      this.#primary.revealRangeInCenter(selection);
+      return;
+    }
     let path: string;
     try {
       path = new URL(range.uri).pathname;
@@ -913,7 +1050,9 @@ export class WebIdeWorkbench {
   }
 
   #activeDocumentUri(): string | undefined {
-    return this.#activePath ? this.#modelUri(this.#activePath) : undefined;
+    return this.#activePath
+      ? this.#tabs.get(this.#activePath)?.model.uri.toString()
+      : undefined;
   }
 
   #activeBaseName(): string {
@@ -1023,6 +1162,9 @@ export class WebIdeWorkbench {
     host.classList.remove("hidden");
     this.#secondary = monaco.editor.create(host, {
       model: this.#primary.getModel(),
+      readOnly: this.#activePath
+        ? (this.#tabs.get(this.#activePath)?.readOnly ?? false)
+        : false,
       automaticLayout: true,
       theme: document.documentElement.classList.contains("light")
         ? "interlis-light"

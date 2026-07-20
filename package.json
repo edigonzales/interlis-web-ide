@@ -34,6 +34,7 @@
     "vitest": "^4.0.16"
   },
   "dependencies": {
+    "@ilic/tools": "snapshot",
     "@ilic/diagram": "snapshot",
     "@ilic/docx": "snapshot",
     "@ilic/language-service": "snapshot",
