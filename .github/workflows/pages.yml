@@ -3,6 +3,8 @@ name: Deploy GitHub Pages
 on:
   push:
     branches: [main]
+  repository_dispatch:
+    types: [release-train-published]
   workflow_dispatch:
 
 permissions:
@@ -25,11 +27,13 @@ jobs:
       - uses: actions/checkout@v6
         with:
           repository: edigonzales/interlis-language-tools
+          ref: ${{ github.event_name == 'repository_dispatch' && github.event.client_payload.language_tools_sha || 'main' }}
           path: interlis-language-tools
           persist-credentials: false
       - uses: actions/checkout@v6
         with:
           repository: edigonzales/ilic-fork
+          ref: ${{ github.event_name == 'repository_dispatch' && github.event.client_payload.compiler_sha || 'main' }}
           path: ilic-fork
           persist-credentials: false
       - uses: pnpm/action-setup@v4
@@ -55,8 +59,14 @@ jobs:
           ./scripts/build-wasm.sh
       - name: Build cross-repository npm tarballs
         working-directory: interlis-language-tools
-        run: pnpm install --frozen-lockfile && pnpm pack:verify
-      - run: pnpm install --frozen-lockfile
+        env:
+          SNAPSHOT_TIMESTAMP: ${{ github.event.client_payload.timestamp }}
+          SNAPSHOT_BUILD_ID: ${{ github.event.client_payload.build_id }}
+        run: |
+          set -euo pipefail
+          pnpm install --frozen-lockfile
+          pnpm pack:verify
+      - run: pnpm install --force --update-checksums
         working-directory: interlis-web-ide
       - run: pnpm check
         working-directory: interlis-web-ide
