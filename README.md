@@ -68,7 +68,7 @@ cd ../interlis-language-tools
 corepack pnpm install --frozen-lockfile
 corepack pnpm pack:verify
 cd ../interlis-web-ide
-corepack pnpm install --force --update-checksums
+corepack pnpm install --no-frozen-lockfile --force --update-checksums
 corepack pnpm check
 corepack pnpm e2e
 ```
@@ -79,6 +79,13 @@ das Lockfile halten trotzdem die vollständigen unveränderlichen Versionen
 `0.1.0-SNAPSHOT.<UTC-Zeitstempel>` beziehungsweise
 `0.9.9-SNAPSHOT.<UTC-Zeitstempel>` fest. Dadurch erfordert ein neuer
 Cross-Repository-Snapshot keine manuelle Pfadanpassung.
+
+Die Web-IDE-Installation verwendet bewusst `--no-frozen-lockfile --force
+--update-checksums`: Die lokalen Tarballs werden im vorherigen Schritt neu
+erzeugt und können bei gleichem Dateinamen eine andere Prüfsumme haben. GitHub
+Actions setzt bei `CI=true` automatisch `frozen-lockfile`; deshalb ist
+`--no-frozen-lockfile` im Workflow ausdrücklich nötig. Die aktualisierte
+Prüfsumme gilt nur auf dem Runner und wird nicht in das Repository committed.
 
 `pnpm dev` startet die lokale Entwicklung. `pnpm preview` prüft den erzeugten
 Pages-/PWA-Build. Node 22 und pnpm 11.14 sind festgelegt.

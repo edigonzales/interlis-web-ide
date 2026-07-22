@@ -51,7 +51,9 @@ jobs:
       - name: Build cross-repository npm tarballs
         working-directory: interlis-language-tools
         run: pnpm install --frozen-lockfile && pnpm pack:verify
-      - run: pnpm install --frozen-lockfile
+      # The downloaded runtime contains freshly generated local tarballs. CI's
+      # implicit frozen mode must be disabled while refreshing their checksums.
+      - run: pnpm install --no-frozen-lockfile --force --update-checksums
         working-directory: interlis-web-ide
       - run: pnpm exec playwright install --with-deps chromium
         working-directory: interlis-web-ide

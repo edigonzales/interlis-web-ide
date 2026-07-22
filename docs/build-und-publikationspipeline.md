@@ -70,7 +70,8 @@ Die Reihenfolge ist:
    installieren und `./scripts/build-wasm.sh` ausführen;
 2. im Language-Tools-Repository mit eingefrorenem Lockfile installieren und
    `pnpm pack:verify` ausführen;
-3. in der Web IDE mit `pnpm install --frozen-lockfile` installieren;
+3. in der Web IDE mit `pnpm install --no-frozen-lockfile --force
+   --update-checksums` installieren;
 4. `pnpm check` ausführen;
 5. `dist/` und die erzeugten npm-Tarballs als
    `interlis-web-ide-runtime-<SHA>` 14 Tage hochladen;
@@ -139,17 +140,20 @@ Der Pages-Build wiederholt bewusst die auslieferungsrelevanten Schritte:
 2. sieben Tarballs aus dem ausgewählten Language-Tools-SHA mit der exakten
    Compiler-Version und der separaten Language-Zeit-/Build-ID bauen und als
    Consumer prüfen;
-3. Web-IDE-Abhängigkeiten mit `pnpm install --force --update-checksums`
+3. Web-IDE-Abhängigkeiten mit `pnpm install --no-frozen-lockfile --force
+   --update-checksums`
    installieren;
 4. mit `pnpm check` linten, typprüfen, Unit-Tests ausführen und den
    Produktionsbuild erzeugen;
 5. GitHub Pages konfigurieren und nur `interlis-web-ide/dist` als
    Pages-Artefakt hochladen.
 
-`--update-checksums` ist erforderlich, weil die lokalen Tarball-Dateinamen
-stabil bleiben, ihr Inhalt bei jedem koordinierten Snapshot aber eine neue
-Version und Prüfsumme besitzt. Es ändert das eingecheckte Lockfile auf dem
-Runner, nicht im Repository.
+`--no-frozen-lockfile --update-checksums` ist erforderlich, weil die lokalen
+Tarball-Dateinamen stabil bleiben, ihr Inhalt bei jedem koordinierten Snapshot
+aber eine neue Version und Prüfsumme besitzt. GitHub Actions aktiviert mit
+`CI=true` automatisch `frozen-lockfile`; die explizite Deaktivierung verhindert
+den Fehler `ERR_PNPM_FROZEN_LOCKFILE_WITH_OUTDATED_LOCKFILE`. Die aktualisierte
+Prüfsumme gilt nur auf dem Runner, nicht im Repository.
 
 Der Pages-Workflow führt keine Playwright-Suite aus. Diese Browser-Evidenz
 kommt aus CI; der Deploy selbst wird durch die schnelleren `pnpm check`-Gates
@@ -255,7 +259,7 @@ corepack pnpm install --frozen-lockfile
 corepack pnpm pack:verify
 
 cd ../interlis-web-ide
-corepack pnpm install --force --update-checksums
+corepack pnpm install --no-frozen-lockfile --force --update-checksums
 corepack pnpm check
 corepack pnpm e2e
 corepack pnpm preview

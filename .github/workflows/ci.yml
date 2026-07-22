@@ -55,7 +55,9 @@ jobs:
       # Cross-repository tarballs are generated during this job. Their bytes,
       # and therefore their local file integrity, are intentionally resolved
       # on the runner instead of being trusted from the committed lockfile.
-      - run: pnpm install --force --update-checksums
+      # CI enables frozen-lockfile by default, so it must be disabled explicitly
+      # for this runner-local checksum refresh.
+      - run: pnpm install --no-frozen-lockfile --force --update-checksums
         working-directory: interlis-web-ide
       - run: pnpm check
         working-directory: interlis-web-ide
@@ -104,8 +106,9 @@ jobs:
           name: interlis-web-ide-runtime-${{ github.sha }}
           path: .
       # The runtime artifact contains freshly generated local tarballs whose
-      # checksums can differ from the source lockfile.
-      - run: pnpm install --force --update-checksums
+      # checksums can differ from the source lockfile. CI's implicit frozen
+      # mode must be disabled for the runner-local checksum refresh.
+      - run: pnpm install --no-frozen-lockfile --force --update-checksums
         working-directory: interlis-web-ide
       - run: pnpm exec playwright install webkit
         working-directory: interlis-web-ide
