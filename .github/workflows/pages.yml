@@ -36,6 +36,68 @@ jobs:
           ref: ${{ github.event_name == 'repository_dispatch' && github.event.client_payload.compiler_sha || 'main' }}
           path: ilic-fork
           persist-credentials: false
+      - name: Resolve and validate release metadata
+        id: metadata
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          EVENT_COMPILER_SHA: ${{ github.event.client_payload.compiler_sha }}
+          EVENT_LANGUAGE_TOOLS_SHA: ${{ github.event.client_payload.language_tools_sha }}
+          EVENT_COMPILER_VERSION: ${{ github.event.client_payload.compiler_version }}
+          EVENT_LANGUAGE_TOOLS_VERSION: ${{ github.event.client_payload.language_tools_version }}
+          EVENT_LANGUAGE_TIMESTAMP: ${{ github.event.client_payload.language_timestamp }}
+          EVENT_LANGUAGE_BUILD_ID: ${{ github.event.client_payload.language_build_id }}
+          EVENT_TIMESTAMP: ${{ github.event.client_payload.timestamp }}
+          EVENT_BUILD_ID: ${{ github.event.client_payload.build_id }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "$EVENT_NAME" == "repository_dispatch" ]]; then
+            compiler_sha="$EVENT_COMPILER_SHA"
+            language_tools_sha="$EVENT_LANGUAGE_TOOLS_SHA"
+            compiler_version="$EVENT_COMPILER_VERSION"
+            language_tools_version="$EVENT_LANGUAGE_TOOLS_VERSION"
+            language_timestamp="${EVENT_LANGUAGE_TIMESTAMP:-$EVENT_TIMESTAMP}"
+            language_build_id="${EVENT_LANGUAGE_BUILD_ID:-$EVENT_BUILD_ID}"
+            for value in "$compiler_sha" "$language_tools_sha"; do
+              if [[ ! "$value" =~ ^[0-9a-f]{40}$ ]]; then
+                echo "Release dispatch requires full source SHAs" >&2
+                exit 1
+              fi
+            done
+            if [[ ! "$compiler_version" =~ ^0\.9\.9-SNAPSHOT\.[0-9]{14}(\.[0-9]+)?$ ]]; then
+              echo "Invalid compiler snapshot version: $compiler_version" >&2
+              exit 1
+            fi
+            if [[ ! "$language_tools_version" =~ ^0\.1\.0-SNAPSHOT\.[0-9]{14}(\.[0-9]+)?$ ]]; then
+              echo "Invalid language-tools snapshot version: $language_tools_version" >&2
+              exit 1
+            fi
+            if [[ ! "$language_timestamp" =~ ^[0-9]{14}$ || ! "$language_build_id" =~ ^[0-9]+$ ]]; then
+              echo "Release dispatch requires language timestamp and numeric build ID" >&2
+              exit 1
+            fi
+          else
+            compiler_sha=$(git -C ilic-fork rev-parse HEAD)
+            language_tools_sha=$(git -C interlis-language-tools rev-parse HEAD)
+            compiler_version=""
+            language_tools_version=""
+            language_timestamp=$(date -u +%Y%m%d%H%M%S)
+            language_build_id="$GITHUB_RUN_ID"
+          fi
+          actual_compiler_sha=$(git -C ilic-fork rev-parse HEAD)
+          actual_language_tools_sha=$(git -C interlis-language-tools rev-parse HEAD)
+          if [[ "$actual_compiler_sha" != "$compiler_sha" || "$actual_language_tools_sha" != "$language_tools_sha" ]]; then
+            echo "Checked-out source does not match the release metadata" >&2
+            exit 1
+          fi
+          {
+            echo "compiler_sha=$compiler_sha"
+            echo "language_tools_sha=$language_tools_sha"
+            echo "compiler_version=$compiler_version"
+            echo "language_tools_version=$language_tools_version"
+            echo "language_timestamp=$language_timestamp"
+            echo "language_build_id=$language_build_id"
+          } >> "$GITHUB_OUTPUT"
       - uses: pnpm/action-setup@v4
         with:
           version: 11.14.0
@@ -60,8 +122,10 @@ jobs:
       - name: Build cross-repository npm tarballs
         working-directory: interlis-language-tools
         env:
-          SNAPSHOT_TIMESTAMP: ${{ github.event.client_payload.timestamp }}
-          SNAPSHOT_BUILD_ID: ${{ github.event.client_payload.build_id }}
+          SNAPSHOT_TIMESTAMP: ${{ steps.metadata.outputs.language_timestamp }}
+          SNAPSHOT_BUILD_ID: ${{ steps.metadata.outputs.language_build_id }}
+          COMPILER_VERSION: ${{ steps.metadata.outputs.compiler_version }}
+          LANGUAGE_TOOLS_VERSION: ${{ steps.metadata.outputs.language_tools_version }}
         run: |
           set -euo pipefail
           pnpm install --frozen-lockfile

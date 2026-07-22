@@ -109,8 +109,12 @@ corepack pnpm e2e:public-clone --project chromium
 Die Pages-Pipeline baut Compiler und Language-Tool-Tarballs reproduzierbar neu,
 führt `pnpm check` aus und deployed ausschließlich `dist`. Nach einem
 koordinierten npm-Release wird sie per `repository_dispatch` mit den exakten
-Compiler- und Language-Tools-SHAs gestartet. Bei einem direkten Web-IDE-Push
-bleibt der bisherige `main`-Fallback bestehen. Details zu
+Compiler- und Language-Tools-SHAs gestartet. Der direkte `main`- und manuelle
+Trigger erzeugen dagegen bewusst einen nicht release-gepinnten Live-Build mit
+eigener Snapshot-Zeit und Run-ID. Trigger, Gates, Pinning, lokale Abweichungen,
+Artefakte, Berechtigungen und Recovery sind in der
+[Build- und Publikationspipeline](docs/build-und-publikationspipeline.md)
+beschrieben. Details zu
 Browserabweichungen, Local-Folder-Rechten und dem WebKit-Testtreiber stehen in
 [docs/browser-support.md](docs/browser-support.md); Sicherheits- und
 Datengrenzen in [docs/security-and-privacy.md](docs/security-and-privacy.md).
