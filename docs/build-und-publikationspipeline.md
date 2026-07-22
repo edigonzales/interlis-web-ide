@@ -222,8 +222,12 @@ permissions:
 
 `pages: write` und der kurzlebige OIDC-Token sind nur für GitHub Pages nötig.
 Im Web-IDE-Repository gibt es für diesen Ablauf kein npm-, Marketplace- oder
-manuelles Deploy-Secret. Das Secret zum Senden des eingehenden Dispatchs liegt
-im vorgelagerten `interlis-language-tools`-Repository.
+manuelles Deploy-Secret. Das Web-IDE-Repository empfängt lediglich den
+`release-train-published`-Dispatch. Das Secret `RELEASE_DISPATCH_TOKEN` liegt
+im vorgelagerten `interlis-language-tools`-Repository und wird dort als
+GitHub-API-Token für den Dispatch gespeichert. Es ist kein npm-Token und wird
+hier nicht benötigt; GitHub Pages verwendet die in diesem Workflow deklarierte
+`pages: write`-/OIDC-Berechtigung.
 
 Publiziert wird ausschliesslich der statische Inhalt von `dist/`. Nicht
 publiziert werden:
