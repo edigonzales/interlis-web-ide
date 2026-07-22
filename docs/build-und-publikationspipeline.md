@@ -142,6 +142,12 @@ Rekonstruktion werden `language_timestamp`, `language_build_id` und
 erzeugten Tarballs dieselben Paketversionen wie der koordinierte npm-Release
 tragen.
 
+Der `repository_dispatch`-Payload bleibt unter GitHubs Limit von zehn
+Eigenschaften. `language_timestamp` und `language_build_id` sind deshalb die
+verbindlichen Language-Tools-Felder; redundante Alias-Felder wie `timestamp`
+und `build_id` werden nicht übertragen. Die getrennten Compiler-Felder bleiben
+für Nachverfolgbarkeit und Release-Diagnose erhalten.
+
 Die beiden Versionsfelder und `release_run_id` dienen der Nachverfolgbarkeit
 des Ereignisses. Compiler- und Language-Build-ID bleiben getrennt.
 
