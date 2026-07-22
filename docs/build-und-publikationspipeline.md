@@ -25,13 +25,14 @@ flowchart LR
 | Workflow                                                                                  | Trigger                                                | Ergebnis                                                                             |
 | ----------------------------------------------------------------------------------------- | ------------------------------------------------------ | ------------------------------------------------------------------------------------ |
 | [`.github/workflows/ci.yml`](../.github/workflows/ci.yml)                                 | Push auf `main` oder `codex/**`, Pull Request, manuell | Build-, Unit- und Browser-Tests; Runtime- und Testartefakte für 14 Tage              |
-| [`.github/workflows/pages.yml`](../.github/workflows/pages.yml)                           | Push auf `main`, `release-train-published`, manuell    | Quellen und lokale Tarballs neu bauen, `pnpm check`, nur `dist/` nach Pages deployen |
+| [`.github/workflows/pages.yml`](../.github/workflows/pages.yml)                           | `release-train-published`, manuell                    | Gepinnte Quellen und lokale Tarballs neu bauen, `pnpm check`, nur `dist/` nach Pages deployen |
 | [`.github/workflows/public-clone-smoke.yml`](../.github/workflows/public-clone-smoke.yml) | montags 04:17 UTC, manuell                             | realen öffentlichen HTTPS-Shallow-Clone in Chromium prüfen                           |
 
-Die drei Abläufe haben unterschiedliche Zwecke: CI liefert breite technische
-Evidenz, der Pages-Workflow ist der eigentliche Deploy, und der geplante
-Public-Clone-Smoke erkennt Änderungen an externem Netz- oder Repository-
-Verhalten.
+Die drei Abläufe haben unterschiedliche Zwecke: CI liefert die technische
+Evidenz und Browser-Gates, der Pages-Workflow ist der eigentliche produktive
+Deploy, und der geplante Public-Clone-Smoke erkennt Änderungen an externem
+Netz- oder Repository-Verhalten. Ein Push auf `main` startet nur CI; Pages
+wird nicht parallel zu dieser Prüfung ausgelöst.
 
 ## Quell- und Paketmodell
 
@@ -167,17 +168,19 @@ Build nach einem neueren live geht.
 
 ## Direkter `main`- und manueller Pages-Build
 
-Ein Push auf den Web-IDE-Branch `main` startet weiterhin direkt einen
-Pages-Build. Ein manueller Start ist ebenfalls möglich. Bei beiden Wegen
-werden die `main`-Stände von Compiler und Language Tools verwendet; es gibt
-keinen koordinierten Payload mit einer bereits publizierten Quellpaarung.
+Ein Push auf den Web-IDE-Branch `main` startet nur den CI-Workflow. Ein
+manueller Pages-Start ist weiterhin möglich und verwendet die `main`-Stände von
+Compiler und Language Tools; er ist ein bewusst nicht release-gepinnter
+Live-/Recovery-Build. Der produktive automatische Pages-Weg verwendet dagegen
+ausschließlich den `release-train-published`-Payload mit einer bereits
+publizierten Quellpaarung.
 
-Bei einem Push oder manuellen Start existiert kein Release-Payload. Der
-Workflow erzeugt deshalb eine eigene UTC-Zeit und verwendet die aktuelle
-Workflow-Run-ID. Compiler- und Language-Tools-SHA werden nach dem Checkout
-festgehalten; es entsteht bewusst ein Live-/Entwicklungsbuild und kein Nachweis
-für ein bereits publiziertes npm-Manifest. Leere Event-Felder werden nicht mehr
-als Snapshot-Werte an `pack:verify` weitergereicht.
+Bei einem manuellen Start existiert kein Release-Payload. Der Workflow erzeugt
+deshalb eine eigene UTC-Zeit und verwendet die aktuelle Workflow-Run-ID.
+Compiler- und Language-Tools-SHA werden nach dem Checkout festgehalten; es
+entsteht bewusst ein Live-/Entwicklungsbuild und kein Nachweis für ein bereits
+publiziertes npm-Manifest. Leere Event-Felder werden nicht als Snapshot-Werte
+an `pack:verify` weitergereicht.
 
 Nur `release-train-published` ist ein reproduzierbarer Release-Build: Dort sind
 beide SHAs und die exakten Versionen im Payload gepinnt.
@@ -274,9 +277,9 @@ corepack pnpm e2e:public-clone --project chromium
 ## Fehlerbehandlung und Nachweis
 
 - Scheitert der Build-Job, wird kein Pages-Artefakt deployed.
-- Bei einem direkten Push oder manuellen Lauf zuerst die bekannte leere
-  `SNAPSHOT_TIMESTAMP`-Übergabe berücksichtigen; dieser Pfad ist derzeit nicht
-  releasefähig.
+- Ein Push auf `main` löst keinen Pages-Lauf aus. Ein manueller Pages-Lauf ist
+  ein nicht release-gepinnter Live-/Recovery-Build und kann unabhängig vom
+  letzten CI-Lauf fehlschlagen.
 - Scheitert nur der Deploy-Job, bleibt der vorherige Pages-Stand online; der
   verifizierte Build kann anhand des Action-Laufs untersucht werden.
 - Bei falschen oder nicht erreichbaren SHAs schlägt bereits der Checkout fehl.

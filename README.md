@@ -106,13 +106,15 @@ SVG, DOCX und Offline-Verhalten in Chromium, Firefox und WebKit ab. Der reale
 corepack pnpm e2e:public-clone --project chromium
 ```
 
-Die Pages-Pipeline baut Compiler und Language-Tool-Tarballs reproduzierbar neu,
+Die CI prüft Pushes auf `main` mit Build-, Unit- und Browser-Gates. Die
+Pages-Pipeline baut Compiler und Language-Tool-Tarballs reproduzierbar neu,
 führt `pnpm check` aus und deployed ausschließlich `dist`. Nach einem
 koordinierten npm-Release wird sie per `repository_dispatch` mit den exakten
-Compiler- und Language-Tools-SHAs gestartet. Der direkte `main`- und manuelle
-Trigger erzeugen dagegen bewusst einen nicht release-gepinnten Live-Build mit
-eigener Snapshot-Zeit und Run-ID. Trigger, Gates, Pinning, lokale Abweichungen,
-Artefakte, Berechtigungen und Recovery sind in der
+Compiler- und Language-Tools-SHAs gestartet; ein Web-IDE-Push löst keinen
+parallelen Pages-Deploy mehr aus. Ein manueller Pages-Trigger bleibt als
+nicht release-gepinnter Live-/Recovery-Build mit eigener Snapshot-Zeit und
+Run-ID verfügbar. Trigger, Gates, Pinning, lokale Abweichungen, Artefakte,
+Berechtigungen und Recovery sind in der
 [Build- und Publikationspipeline](docs/build-und-publikationspipeline.md)
 beschrieben. Details zu
 Browserabweichungen, Local-Folder-Rechten und dem WebKit-Testtreiber stehen in
