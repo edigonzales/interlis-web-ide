@@ -428,16 +428,55 @@ button:hover {
 .panel > header span {
   flex: 1;
 }
-#output {
+.panel-content {
   height: calc(100% - 34px);
-  margin: 0;
   padding: 6px 12px;
   overflow: auto;
+}
+#output {
+  margin: 0;
   font:
     12px/1.5 "SFMono-Regular",
     Consolas,
     monospace;
   white-space: pre-wrap;
+}
+.problems-summary,
+.panel-empty {
+  margin: 4px 0 8px;
+  color: #aaa;
+  font-size: 12px;
+}
+.problem-row {
+  display: flex;
+  width: 100%;
+  flex-direction: column;
+  gap: 2px;
+  padding: 5px 8px;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+}
+.problem-row:hover {
+  background: #ffffff0b;
+}
+.problem-heading {
+  font:
+    11px/1.4 "SFMono-Regular",
+    Consolas,
+    monospace;
+}
+.problem-row.error .problem-heading {
+  color: #f48771;
+}
+.problem-row.warning .problem-heading {
+  color: #cca700;
+}
+.problem-message {
+  font-size: 12px;
+}
+.problem-details {
+  color: #aaa;
+  font-size: 11px;
 }
 
 .statusbar {

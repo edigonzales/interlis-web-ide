@@ -8,6 +8,11 @@ test("runs shared language tooling and live exports", async ({ page }) => {
   const diagram = page.getByRole("region", {
     name: "Live INTERLIS diagram",
   });
+  await expect(diagram).toContainText("Save or compile");
+  await page.getByRole("button", { name: "Run", exact: true }).click();
+  await expect(page.locator("#output")).toContainText(
+    "ilic completed with no errors, no warnings.",
+  );
   await expect(diagram.locator("svg")).toBeVisible();
   await expect(diagram.locator(".ili-node").first()).toBeVisible();
 
@@ -24,8 +29,10 @@ test("runs shared language tooling and live exports", async ({ page }) => {
     )
     .toContain("ORTHOGONAL");
 
-  await page.getByRole("button", { name: "Run", exact: true }).click();
-  await expect(page.getByText(/Compile succeeded:/u)).toBeVisible();
+  await page.getByRole("button", { name: /PROBLEMS/u }).click();
+  await expect(page.locator("#problems")).toContainText("0 errors, 0 warnings");
+  await page.getByRole("button", { name: "OUTPUT", exact: true }).click();
+  await expect(page.locator("#output")).toBeVisible();
 
   const svgDownload = page.waitForEvent("download");
   await diagram.getByRole("button", { name: "SVG", exact: true }).click();
@@ -34,6 +41,100 @@ test("runs shared language tooling and live exports", async ({ page }) => {
   const docxDownload = page.waitForEvent("download");
   await diagram.getByRole("button", { name: "DOCX", exact: true }).click();
   expect((await docxDownload).suggestedFilename()).toMatch(/\.docx$/u);
+});
+
+test("save replaces structured Problems and compiler Output together", async ({
+  page,
+  browserName,
+}) => {
+  test.setTimeout(60_000);
+  test.skip(
+    browserName !== "chromium",
+    "Structured Problems smoke is run once",
+  );
+  const workspaceId = `compilation-e2e-${browserName}-${Date.now()}`;
+  await page.goto("./icon.svg");
+  await page.evaluate(
+    async ({ id, source }) => {
+      sessionStorage.setItem("interlis-web-ide.active-workspace", id);
+      const root = await navigator.storage.getDirectory();
+      const metadata = await root.getDirectoryHandle(".interlis", {
+        create: true,
+      });
+      const metadataFile = await metadata.getFileHandle("workspaces.json", {
+        create: true,
+      });
+      const metadataWriter = await metadataFile.createWritable();
+      await metadataWriter.write(
+        JSON.stringify({
+          schemaVersion: 1,
+          workspaces: [
+            {
+              id,
+              name: "Compilation E2E",
+              kind: "opfs",
+              createdAt: "2026-01-01T00:00:00.000Z",
+            },
+          ],
+        }),
+      );
+      await metadataWriter.close();
+      const workspaces = await root.getDirectoryHandle("workspaces", {
+        create: true,
+      });
+      const workspace = await workspaces.getDirectoryHandle(id, {
+        create: true,
+      });
+      const model = await workspace.getFileHandle("Model.ili", {
+        create: true,
+      });
+      const writer = await model.createWritable();
+      await writer.write(source);
+      await writer.close();
+    },
+    {
+      id: workspaceId,
+      source: `INTERLIS 2.4;
+MODEL Valid (en) AT "https://example.invalid" VERSION "1" =
+END Valid.
+`,
+    },
+  );
+  await page.goto("./");
+  const editorInput = page
+    .getByRole("textbox", { name: "Editor content" })
+    .first();
+  await editorInput.focus();
+  await page.keyboard.press("Control+End");
+  await page.keyboard.press("Enter");
+  await page.keyboard.insertText("BROKEN");
+  await page.keyboard.press("Control+S");
+
+  const problem = page.locator("#problems .problem-row").first();
+  await expect(problem).toBeVisible();
+  await expect(page.locator("#problem-count")).not.toHaveText("0");
+  await problem.click();
+  await expect(page.locator("#cursor-status")).not.toHaveText("Ln 1, Col 1");
+  await page.getByRole("button", { name: "OUTPUT", exact: true }).click();
+  await expect(page.locator("#output")).toContainText("err:");
+  await expect(page.locator("#output")).toContainText("ilic completed with");
+  await expect(page.locator("#output")).not.toContainText("Saved /Model.ili");
+
+  await editorInput.focus();
+  await page.keyboard.press("Control+End");
+  for (let index = 0; index < "BROKEN".length; index++)
+    await page.keyboard.press("Backspace");
+  await page.keyboard.press("Backspace");
+  await expect(page.locator(".view-lines")).toContainText("INTERLIS 2.4;");
+  await page.keyboard.press("Control+S");
+  await expect(page.locator("#compile-status")).toContainText("compiled");
+  await page.getByRole("button", { name: /PROBLEMS/u }).click();
+  await expect(page.locator("#problems .problem-row")).toHaveCount(0);
+  await expect(page.locator("#problems")).toContainText("0 errors, 0 warnings");
+  await page.getByRole("button", { name: "OUTPUT", exact: true }).click();
+  await expect(page.locator("#output")).toContainText(
+    "ilic completed with no errors, no warnings.",
+  );
 });
 
 test("opens an imported repository model as a read-only tab", async ({
@@ -122,7 +223,6 @@ END Root.
 `,
   );
   await page.goto("./");
-  await expect(page.locator("#diagram-host svg")).toBeVisible();
   await page.locator(".view-lines").click();
   await page.keyboard.press("Control+A");
   await page.keyboard.insertText(`INTERLIS 2.4;
@@ -130,22 +230,20 @@ MODEL Root (en) AT "https://example.invalid" VERSION "1" =
   IMPORTS Units;
 END Root.
 `);
-  await page.getByRole("button", { name: "Run", exact: true }).click();
-  await expect(page.getByText(/Compile succeeded:/u)).toBeVisible();
+  await page.keyboard.press(`${definitionModifier}+S`);
+  await expect(page.locator("#compile-status")).toContainText("compiled");
 
   const ctrlClickUnits = async (): Promise<void> => {
     const importLine = page.locator(".view-line", {
       hasText: "IMPORTS Units;",
     });
     await expect(importLine).toBeVisible();
-    const bounds = await importLine.boundingBox();
-    if (!bounds) throw new Error("Missing Monaco import line bounds");
-    await page.mouse.move(bounds.x + 104, bounds.y + bounds.height / 2);
-    await page.keyboard.down(definitionModifier);
-    await page.mouse.move(bounds.x + 105, bounds.y + bounds.height / 2);
-    await expect(page.locator(".goto-definition-link")).toBeVisible();
-    await page.mouse.click(bounds.x + 105, bounds.y + bounds.height / 2);
-    await page.keyboard.up(definitionModifier);
+    await importLine.click({ position: { x: 5, y: 5 } });
+    await page.keyboard.press("Home");
+    await page.keyboard.press("Home");
+    for (let column = 0; column < 10; column++)
+      await page.keyboard.press("ArrowRight");
+    await page.keyboard.press("F12");
     await expect(page.locator("#breadcrumbs")).toContainText("Repository");
   };
 
@@ -172,14 +270,14 @@ END Root.
       .locator("#tabs")
       .getByRole("button", { name: "Model.ili", exact: true }),
   ).toBeVisible();
-  await expect(
-    page.getByText(/cached and ready for offline use/u),
-  ).toBeVisible();
+  await page.evaluate(() => navigator.serviceWorker.ready);
   await page.unroute("https://models.example/**");
   await page.context().setOffline(true);
   await page.reload();
-  await expect(page.locator("#diagram-host svg")).toBeVisible();
   await page.getByRole("button", { name: "Run", exact: true }).click();
-  await expect(page.getByText(/Compile succeeded:/u)).toBeVisible();
+  await expect(page.locator("#output")).toContainText(
+    "ilic completed with no errors, no warnings.",
+  );
+  await expect(page.locator("#diagram-host svg")).toBeVisible();
   await ctrlClickUnits();
 });

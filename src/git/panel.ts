@@ -172,7 +172,9 @@ export class GitPanel {
           this.saveIdentity(author);
           const oid = await service.commit(message.value, author);
           this.#diffText = "";
-          this.workbench.output.textContent += `\nCommitted ${oid.slice(0, 8)}: ${message.value.trim()}`;
+          this.workbench.logActivity(
+            `Committed ${oid.slice(0, 8)}: ${message.value.trim()}`,
+          );
         },
         "Changes committed locally.",
       ),

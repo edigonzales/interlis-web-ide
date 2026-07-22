@@ -14,10 +14,10 @@ import { generateDocx } from "@ilic/docx";
 import {
   OFFLINE_TEMPLATE,
   fetchTemplate,
-  isBlankInterlisDocument,
+  formatCompilationOutput,
+  type CompilationEvent,
+  type Diagnostic,
   type LanguageService,
-  type VersionedResult,
-  type SemanticSnapshot,
 } from "@ilic/language-service";
 import type {
   Disposable as LanguageDisposable,
@@ -259,13 +259,21 @@ export class WebIdeWorkbench {
     this.#updateWorkspaceStatus();
     this.#log("OPFS workspace and recovery services are ready.");
     this.#required("#diagram-host").classList.remove("hidden");
-    this.#renderDiagramStatus("Analyzing the current workspace…");
+    this.#renderDiagramStatus("Save or compile to create a diagram.");
   }
 
-  async publishAnalysis(
-    result: VersionedResult<SemanticSnapshot>,
-  ): Promise<void> {
-    if (!result.value) return;
+  async publishCompilation(event: CompilationEvent): Promise<void> {
+    this.output.textContent = formatCompilationOutput(event);
+    this.#renderProblems(event);
+    this.#required("#result-status").textContent = event.compilation.success
+      ? `${event.compilation.errorCount} errors, ${event.compilation.warningCount} warnings`
+      : `failed — ${event.compilation.errorCount} errors, ${event.compilation.warningCount} warnings`;
+    this.#required("#compile-status").textContent = event.compilation.success
+      ? "INTERLIS: compiled"
+      : `INTERLIS: ${event.compilation.errorCount} error(s)`;
+    if (event.trigger === "manual") this.#selectPanelView("output");
+    const result = this.languageService.getSavedSemanticSnapshot(event.rootUri);
+    if (!result?.value) return;
     this.#diagram.publish(
       result.value,
       result.freshness === "fresh" ? "fresh" : "stale",
@@ -278,6 +286,10 @@ export class WebIdeWorkbench {
     this.#log(
       `${operation} failed: ${error instanceof Error ? error.message : String(error)}`,
     );
+  }
+
+  logActivity(message: string): void {
+    this.#log(message);
   }
 
   setSourceControlRenderer(
@@ -296,6 +308,114 @@ export class WebIdeWorkbench {
   }
   get output(): HTMLElement {
     return this.#required("#output");
+  }
+
+  #selectPanelView(view: "problems" | "output"): void {
+    this.#required("#problems").classList.toggle("hidden", view !== "problems");
+    this.output.classList.toggle("hidden", view !== "output");
+    for (const button of this.host.querySelectorAll<HTMLElement>(
+      "[data-panel-view]",
+    ))
+      button.classList.toggle("active", button.dataset.panelView === view);
+  }
+
+  #renderProblems(event: CompilationEvent): void {
+    const host = this.#required("#problems");
+    const { diagnostics, errorCount, warningCount } = event.compilation;
+    this.#required("#problem-count").textContent = String(errorCount);
+    this.#required("#problem-count").setAttribute(
+      "title",
+      `${errorCount} errors, ${warningCount} warnings`,
+    );
+    const summary = document.createElement("p");
+    summary.className = "problems-summary";
+    summary.textContent = `${errorCount} errors, ${warningCount} warnings`;
+    const rows = diagnostics.map((diagnostic) => {
+      const row = document.createElement("button");
+      const severity = diagnostic.treatedAsError
+        ? "error"
+        : diagnostic.severity;
+      const range = diagnostic.range;
+      row.className = `problem-row ${severity}`;
+      row.dataset.severity = severity;
+      row.innerHTML = "";
+      const location = range
+        ? `${this.#labelForUri(range.uri)}:${range.start.line + 1}:${range.start.character + 1}`
+        : this.#labelForUri(event.rootUri);
+      const heading = document.createElement("span");
+      heading.className = "problem-heading";
+      heading.textContent = `${severity.toUpperCase()} ${location} [${diagnostic.code || "none"}]`;
+      const message = document.createElement("span");
+      message.className = "problem-message";
+      message.textContent = diagnostic.message;
+      row.append(heading, message);
+      if (
+        diagnostic.notes.length > 0 ||
+        diagnostic.relatedInformation.length > 0
+      ) {
+        const details = document.createElement("span");
+        details.className = "problem-details";
+        details.textContent = [
+          ...diagnostic.notes.map((note) => `Note: ${note}`),
+          ...diagnostic.relatedInformation.map(
+            (related) => `Related: ${related.message}`,
+          ),
+        ].join(" · ");
+        row.append(details);
+      }
+      row.addEventListener(
+        "click",
+        () => void this.#navigateToDiagnostic(diagnostic, event.rootUri),
+      );
+      return row;
+    });
+    if (rows.length === 0) {
+      const empty = document.createElement("p");
+      empty.className = "panel-empty";
+      empty.textContent = "No diagnostics.";
+      host.replaceChildren(summary, empty);
+    } else host.replaceChildren(summary, ...rows);
+  }
+
+  async #navigateToDiagnostic(
+    diagnostic: Diagnostic,
+    rootUri: string,
+  ): Promise<void> {
+    const uri = diagnostic.range?.uri ?? rootUri;
+    if (this.languageService.getRepositoryDocument(uri))
+      await this.openRepositoryModel(uri);
+    else {
+      const existing = [...this.#tabs.values()].find(
+        (tab) => tab.model.uri.toString() === uri,
+      );
+      if (existing) this.#activateTab(existing);
+      else {
+        try {
+          const path = new URL(uri).pathname;
+          if (await this.#exists(path)) await this.openFile(path);
+        } catch {
+          return;
+        }
+      }
+    }
+    const range = diagnostic.range;
+    if (!range) return;
+    const selection = {
+      startLineNumber: range.start.line + 1,
+      startColumn: range.start.character + 1,
+      endLineNumber: range.end.line + 1,
+      endColumn: range.end.character + 1,
+    };
+    this.#primary.setSelection(selection);
+    this.#primary.revealRangeInCenter(selection);
+    this.#primary.focus();
+  }
+
+  #labelForUri(uri: string): string {
+    return (
+      [...this.#tabs.values()].find((tab) => tab.model.uri.toString() === uri)
+        ?.label ?? uri
+    );
   }
   get hasDirtyBuffers(): boolean {
     return [...this.#tabs.values()].some((tab) => !tab.readOnly && tab.dirty);
@@ -381,11 +501,20 @@ export class WebIdeWorkbench {
       create: true,
       overwrite: true,
     });
+    if (tab.recoveryTimer) {
+      clearTimeout(tab.recoveryTimer);
+      tab.recoveryTimer = null;
+    }
     tab.dirty = false;
+    this.languageService.markSaved(tab.model.uri.toString());
     await this.#recovery.clear(tab.model.uri.toString());
     this.#renderTabs();
     this.#log(`Saved ${tab.path}`);
     await this.renderSidebar();
+    await this.languageService.compileDocument(
+      tab.model.uri.toString(),
+      "save",
+    );
   }
 
   async renderSidebar(): Promise<void> {
@@ -467,24 +596,12 @@ export class WebIdeWorkbench {
 
   async compileWorkspace(): Promise<void> {
     const active = this.#activePath ? this.#tabs.get(this.#activePath) : null;
-    if (!active || isBlankInterlisDocument(active.model.getValue())) {
-      this.#log("Compile skipped: the active INTERLIS document is blank.");
-      return;
-    }
+    if (!active) return;
     await this.#syncWorkspaceSources();
-    const result = await this.languageService.compile();
-    this.#required("#problem-count").textContent = String(result.errorCount);
-    this.#log(
-      `Compile ${result.success ? "succeeded" : "failed"}: ${result.errorCount} error(s), ${result.warningCount} warning(s).`,
+    await this.languageService.compileDocument(
+      active.model.uri.toString(),
+      "manual",
     );
-    for (const diagnostic of result.diagnostics)
-      this.#log(
-        `${diagnostic.severity.toUpperCase()} ${diagnostic.code}: ${diagnostic.message}`,
-      );
-    for (const entry of result.logs)
-      this.#log(
-        `${entry.level.toUpperCase()} [${entry.category}] ${entry.message}`,
-      );
   }
 
   async showDiagram(force = false): Promise<void> {
@@ -495,9 +612,18 @@ export class WebIdeWorkbench {
       this.#required("#editor-secondary").classList.add("hidden");
     }
     this.#required("#diagram-host").classList.remove("hidden");
-    this.#renderDiagramStatus("Updating diagram…");
-    if (force || !this.languageService.getSemanticSnapshot()?.value)
-      await this.languageService.analyzeNow(this.#activeDocumentUri());
+    const saved = this.languageService.getSavedSemanticSnapshot(
+      this.#activeDocumentUri(),
+    );
+    if (!saved?.value) {
+      this.#renderDiagramStatus("No saved snapshot — save or compile first.");
+      return;
+    }
+    if (force)
+      this.#diagram.publish(
+        saved.value,
+        saved.freshness === "fresh" ? "fresh" : "stale",
+      );
     await this.#renderDiagram();
   }
 
@@ -517,9 +643,9 @@ export class WebIdeWorkbench {
   }
 
   async exportDocx(): Promise<void> {
-    let result = this.languageService.getSemanticSnapshot();
-    if (!result?.value) result = await this.languageService.analyzeNow();
-    const snapshot = result.value;
+    const snapshot = this.languageService.getSavedSemanticSnapshot(
+      this.#activeDocumentUri(),
+    )?.value;
     if (!snapshot) {
       this.#log("DOCX export skipped: no semantic snapshot is available.");
       return;
@@ -574,9 +700,12 @@ export class WebIdeWorkbench {
   #bindUi(): void {
     this.host.addEventListener("click", (event) => {
       const target = (event.target as HTMLElement).closest<HTMLElement>(
-        "[data-command],[data-view]",
+        "[data-command],[data-view],[data-panel-view]",
       );
       if (!target) return;
+      const panelView = target.dataset.panelView;
+      if (panelView === "problems" || panelView === "output")
+        this.#selectPanelView(panelView);
       const view = target.dataset.view;
       if (view) {
         this.#activeView = view;
@@ -746,7 +875,9 @@ export class WebIdeWorkbench {
             this.logError("Model repository", message),
           ),
         )
-        .then(() => this.languageService.analyzeNow(this.#activeDocumentUri()));
+        .then(() =>
+          this.#log("Repository settings updated. Save or compile to apply."),
+        );
     });
     host.append(this.#settingRow("INTERLIS model repositories", repositories));
     host.append(
@@ -876,6 +1007,12 @@ export class WebIdeWorkbench {
   #onModelChanged(tab: OpenTab): void {
     if (tab.readOnly) return;
     tab.dirty = true;
+    this.#required("#result-status").textContent = "outdated — save or compile";
+    this.#required("#compile-status").textContent = "INTERLIS: outdated";
+    const saved = this.languageService.getSavedSemanticSnapshot(
+      tab.model.uri.toString(),
+    );
+    if (saved?.value) this.#diagram.publish(saved.value, "stale");
     this.#renderTabs();
     if (tab.recoveryTimer) clearTimeout(tab.recoveryTimer);
     tab.recoveryTimer = setTimeout(() => {
@@ -1094,8 +1231,10 @@ export class WebIdeWorkbench {
     if (await this.#exists(path)) {
       await this.openFile(path);
       const tab = this.#tabs.get(path);
-      tab?.model.setValue(latest.text);
-      this.#log(`Recovered unsaved changes for ${path}`);
+      if (tab && tab.model.getValue() !== latest.text) {
+        tab.model.setValue(latest.text);
+        this.#log(`Recovered unsaved changes for ${path}`);
+      } else await this.#recovery.clear(latest.uri);
     }
   }
 
@@ -1292,8 +1431,8 @@ export class WebIdeWorkbench {
     this.#required("#workspace-status").textContent = `▱ ${message}`;
   }
   #log(message: string): void {
-    this.output.textContent += `\n[${new Date().toLocaleTimeString()}] ${message}`;
-    this.output.scrollTop = this.output.scrollHeight;
+    console.info(message);
+    this.#required("#activity-status").textContent = message;
   }
   #required<T extends HTMLElement = HTMLElement>(selector: string): T {
     const element = this.host.querySelector<T>(selector);

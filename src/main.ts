@@ -28,10 +28,9 @@ async function start(): Promise<void> {
       readRepositorySetting(),
       (message) => workbenchRef.current?.logError("Model repository", message),
     ),
-    onAnalysis: ({ result }) =>
-      void workbenchRef.current?.publishAnalysis(result),
-    onError: (error) =>
-      workbenchRef.current?.logError("Semantic analysis", error),
+    onCompilation: (event) =>
+      void workbenchRef.current?.publishCompilation(event),
+    onError: (error) => workbenchRef.current?.logError("Compilation", error),
   });
   const languageAdapter = registerInterlisMonaco(monaco, languageService, {
     ensureModel: async (uri) =>
@@ -54,11 +53,12 @@ async function start(): Promise<void> {
   registerSW({
     immediate: true,
     onOfflineReady: () => {
-      workbench.output.textContent +=
-        "\nINTERLIS Web IDE is cached and ready for offline use.";
+      workbench.logActivity(
+        "INTERLIS Web IDE is cached and ready for offline use.",
+      );
     },
     onRegisterError: (error) => {
-      workbench.output.textContent += `\nOffline cache registration failed: ${String(error)}`;
+      workbench.logError("Offline cache registration", error);
     },
   });
   window.addEventListener(
