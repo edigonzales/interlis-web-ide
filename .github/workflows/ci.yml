@@ -52,7 +52,10 @@ jobs:
       - name: Build cross-repository npm tarballs
         working-directory: interlis-language-tools
         run: pnpm install --frozen-lockfile && pnpm pack:verify
-      - run: pnpm install --frozen-lockfile
+      # Cross-repository tarballs are generated during this job. Their bytes,
+      # and therefore their local file integrity, are intentionally resolved
+      # on the runner instead of being trusted from the committed lockfile.
+      - run: pnpm install --force --update-checksums
         working-directory: interlis-web-ide
       - run: pnpm check
         working-directory: interlis-web-ide
@@ -100,7 +103,9 @@ jobs:
         with:
           name: interlis-web-ide-runtime-${{ github.sha }}
           path: .
-      - run: pnpm install --frozen-lockfile
+      # The runtime artifact contains freshly generated local tarballs whose
+      # checksums can differ from the source lockfile.
+      - run: pnpm install --force --update-checksums
         working-directory: interlis-web-ide
       - run: pnpm exec playwright install webkit
         working-directory: interlis-web-ide
