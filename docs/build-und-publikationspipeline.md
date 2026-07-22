@@ -98,6 +98,13 @@ Playwright den bereits geprüften `dist/`-Build, statt ihn auf macOS erneut zu
 erzeugen. WebKit-Reports werden ebenfalls unabhängig vom Testergebnis 14 Tage
 aufbewahrt.
 
+Die Trennung ist absichtlich: Ein GitHub-Actions-Job hat genau einen Runner,
+und WebKit funktioniert in unserem aktuellen Playwright-Setup nur auf macOS
+zuverlässig. `verify` bleibt deshalb der vollständige Ubuntu-Gate für Build,
+Checks sowie Chromium und Firefox; `webkit` ergänzt nur den macOS-spezifischen
+Browser-Test. `needs: verify` verhindert einen Lauf auf ungeprüften Quellen,
+während das Runtime-Artefakt einen zweiten WASM-/Produktionsbuild vermeidet.
+
 Ein grüner CI-Lauf deployed nichts. Er ist von der Pages-Pipeline getrennt.
 
 ## Koordinierter Pages-Deploy

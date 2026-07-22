@@ -84,6 +84,9 @@ jobs:
           if-no-files-found: ignore
           retention-days: 14
 
+  # Keep WebKit in a separate macOS job: the current Playwright/WebKit setup
+  # works reliably only on macOS. The job consumes verify's tested runtime so
+  # it does not rebuild the application a second time.
   webkit:
     needs: verify
     runs-on: macos-latest

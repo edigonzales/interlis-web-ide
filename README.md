@@ -128,4 +128,12 @@ Browserabweichungen, Local-Folder-Rechten und dem WebKit-Testtreiber stehen in
 [docs/browser-support.md](docs/browser-support.md); Sicherheits- und
 Datengrenzen in [docs/security-and-privacy.md](docs/security-and-privacy.md).
 
+Die Browser-Gates sind auf zwei Jobs aufgeteilt: `verify` läuft auf Ubuntu und
+baut den geprüften Stand, führt `pnpm check` sowie Chromium- und Firefox-E2E
+aus. `webkit` läuft anschließend auf `macos-latest`, weil WebKit in unserem
+aktuellen Playwright-Setup nur dort zuverlässig funktioniert. Der Job lädt das
+von `verify` erzeugte Runtime-Artefakt und testet es mit
+`PLAYWRIGHT_PREBUILT=1`; dadurch gibt es keinen zweiten WASM-/Produktionsbuild
+und WebKit prüft exakt denselben Stand.
+
 Lizenz: [MIT](LICENSE)
