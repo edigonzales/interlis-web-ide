@@ -24,7 +24,7 @@ flowchart LR
 
 | Workflow                                                                                  | Trigger                                                | Ergebnis                                                                             |
 | ----------------------------------------------------------------------------------------- | ------------------------------------------------------ | ------------------------------------------------------------------------------------ |
-| [`.github/workflows/ci.yml`](../.github/workflows/ci.yml)                                 | Push auf `main` oder `codex/**`, Pull Request, manuell | Build-, Unit- und Browser-Tests; Runtime- und Testartefakte für 14 Tage              |
+| [`.github/workflows/ci.yml`](../.github/workflows/ci.yml)                                 | Push auf `main` oder `codex/**` (ausser reine Markdown-Änderungen), Pull Request (ausser reine Markdown-Änderungen), manuell | Build-, Unit- und Browser-Tests; Runtime- und Testartefakte für 14 Tage              |
 | [`.github/workflows/pages.yml`](../.github/workflows/pages.yml)                           | `release-train-published`, manuell                    | Gepinnte Quellen und lokale Tarballs neu bauen, `pnpm check`, nur `dist/` nach Pages deployen |
 | [`.github/workflows/public-clone-smoke.yml`](../.github/workflows/public-clone-smoke.yml) | montags 04:17 UTC, manuell                             | realen öffentlichen HTTPS-Shallow-Clone in Chromium prüfen                           |
 
@@ -33,6 +33,12 @@ Evidenz und Browser-Gates, der Pages-Workflow ist der eigentliche produktive
 Deploy, und der geplante Public-Clone-Smoke erkennt Änderungen an externem
 Netz- oder Repository-Verhalten. Ein Push auf `main` startet nur CI; Pages
 wird nicht parallel zu dieser Prüfung ausgelöst.
+
+Der CI-Workflow verwendet `paths-ignore: "**/*.md"`. Ein Commit oder Pull
+Request, der ausschliesslich Markdown-Dateien ändert, startet deshalb keinen
+Build. Sobald zusätzlich Quellcode, Konfiguration oder Workflow-Dateien
+geändert werden, läuft CI vollständig; Pages-Dispatches und manuelle Läufe
+bleiben von diesem Filter unberührt.
 
 ## Quell- und Paketmodell
 
