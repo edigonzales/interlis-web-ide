@@ -11,7 +11,7 @@ test("runs shared language tooling and live exports", async ({ page }) => {
   await expect(diagram).toContainText("Save or compile");
   await page.getByRole("button", { name: "Run", exact: true }).click();
   await expect(page.locator("#output")).toContainText(
-    "ilic completed with no errors, no warnings.",
+    /ilic completed with no errors, no warnings\. \d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}/u,
   );
   await expect(diagram.locator("svg")).toBeVisible();
   await expect(diagram.locator(".ili-node").first()).toBeVisible();

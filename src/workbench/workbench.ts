@@ -14,7 +14,7 @@ import { generateDocx } from "@ilic/docx";
 import {
   OFFLINE_TEMPLATE,
   fetchTemplate,
-  formatCompilationOutput,
+  formatCompilationOutputForDisplay,
   type CompilationEvent,
   type Diagnostic,
   type LanguageService,
@@ -263,7 +263,7 @@ export class WebIdeWorkbench {
   }
 
   async publishCompilation(event: CompilationEvent): Promise<void> {
-    this.output.textContent = formatCompilationOutput(event);
+    this.output.textContent = formatCompilationOutputForDisplay(event);
     this.#renderProblems(event);
     this.#required("#result-status").textContent = event.compilation.success
       ? `${event.compilation.errorCount} errors, ${event.compilation.warningCount} warnings`
