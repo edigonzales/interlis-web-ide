@@ -12,7 +12,6 @@ import {
 } from "@ilic/diagram";
 import { generateDocx } from "@ilic/docx";
 import {
-  OFFLINE_TEMPLATE,
   fetchTemplate,
   formatCompilationOutputForDisplay,
   type CompilationEvent,
@@ -127,11 +126,6 @@ export class WebIdeWorkbench {
         id: "new-from-template",
         label: "INTERLIS: New Model from Remote Template",
         run: () => this.newFromRemoteTemplate(),
-      },
-      {
-        id: "new-from-offline-template",
-        label: "INTERLIS: New Model from Offline Template",
-        run: () => this.newFile(OFFLINE_TEMPLATE),
       },
       { id: "save", label: "File: Save", run: () => this.saveActive() },
       {
