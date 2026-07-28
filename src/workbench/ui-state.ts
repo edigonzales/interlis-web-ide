@@ -14,6 +14,34 @@ export const defaultWorkbenchLayoutSettings: WorkbenchLayoutSettings = {
   diagramVisible: true,
 };
 
+export class DebouncedTask {
+  #timer: ReturnType<typeof setTimeout> | null = null;
+
+  constructor(readonly delayMs: number) {}
+
+  schedule(task: () => void): void {
+    this.cancel();
+    this.#timer = setTimeout(() => {
+      this.#timer = null;
+      task();
+    }, this.delayMs);
+  }
+
+  cancel(): void {
+    if (this.#timer) clearTimeout(this.#timer);
+    this.#timer = null;
+  }
+}
+
+export function updateDirtyState(
+  state: { dirty: boolean },
+  dirty: boolean,
+): boolean {
+  if (state.dirty === dirty) return false;
+  state.dirty = dirty;
+  return true;
+}
+
 function finiteNumber(
   value: unknown,
   fallback: number,

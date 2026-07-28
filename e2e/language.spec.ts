@@ -56,7 +56,7 @@ test("navigates class snippets and suppresses empty suggestions", async ({
   const modifier = await page.evaluate(() =>
     navigator.userAgent.includes("Macintosh") ? "Meta" : "Control",
   );
-  await page.keyboard.press(modifier + "+A");
+  await editor.press(modifier + "+A");
   await page.keyboard.insertText(
     "INTERLIS 2.4;\nMODEL M =\n  TOPIC T =\n    \n",
   );

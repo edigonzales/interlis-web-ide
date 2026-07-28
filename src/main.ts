@@ -2,6 +2,8 @@ import "./style.css";
 import { registerSW } from "virtual:pwa-register";
 import {
   LanguageService,
+  createWorkerCompilerBackend,
+  createWorkerEditorAnalysisBackend,
   createWasmCompilerBackend,
 } from "@ilic/language-service";
 import { registerInterlisMonaco } from "@ilic/monaco-adapter";
@@ -11,6 +13,7 @@ import {
 } from "./language-repository.js";
 import { GitPanel } from "./git/index.js";
 import { initializeVscodeServices, monaco } from "./vscode-services.js";
+import { createBrowserCompilerWorkerFactory } from "./language-worker.js";
 import { openOpfsRoot, WorkspaceManager } from "./workspace/index.js";
 import { WebIdeWorkbench } from "./workbench/workbench.js";
 
@@ -21,9 +24,26 @@ async function start(): Promise<void> {
   app!.textContent = "Starting INTERLIS workbench…";
   await initializeVscodeServices(app!);
   app!.textContent = "Loading INTERLIS compiler…";
-  const compiler = await createWasmCompilerBackend();
   const workbenchRef: { current?: WebIdeWorkbench } = {};
+  const pendingWorkerWarnings: string[] = [];
+  const warnWorker = (message: string): void => {
+    console.warn(message);
+    const workbench = workbenchRef.current;
+    if (workbench) workbench.logActivity(message);
+    else pendingWorkerWarnings.push(message);
+  };
+  const localCompiler = await createWasmCompilerBackend();
+  const workerFactory = createBrowserCompilerWorkerFactory();
+  const compiler = createWorkerCompilerBackend(localCompiler, workerFactory, {
+    onWarning: warnWorker,
+  });
+  const editorAnalysis = createWorkerEditorAnalysisBackend(workerFactory, {
+    onWarning: warnWorker,
+    fallback: localCompiler,
+  });
   const languageService = new LanguageService(compiler, {
+    editorAnalysis,
+    liveDiagnostics: "off",
     modelRepository: createBrowserModelRepository(
       readRepositorySetting(),
       (message) => workbenchRef.current?.logError("Model repository", message),
@@ -47,8 +67,9 @@ async function start(): Promise<void> {
     languageAdapter,
   );
   workbenchRef.current = workbench;
-  await workbench.initialize();
+  for (const warning of pendingWorkerWarnings) workbench.logActivity(warning);
   const sourceControl = new GitPanel(workbench, window.localStorage);
+  await workbench.initialize();
   await sourceControl.refreshStatus();
   registerSW({
     immediate: true,

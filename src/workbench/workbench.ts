@@ -52,9 +52,11 @@ import type {
 import { workbenchTemplate } from "./template.js";
 import {
   clampSplitSize,
+  DebouncedTask,
   defaultWorkbenchLayoutSettings,
   outlineCodiconName,
   parseWorkbenchLayoutSettings,
+  updateDirtyState,
   type WorkbenchLayoutSettings,
 } from "./ui-state.js";
 import {
@@ -94,6 +96,8 @@ END NewModel.
 const diagramSettingsKey = "interlis-web-ide.diagram-settings";
 const layoutSettingsKey = "interlis-web-ide.layout-settings";
 const autoSaveDelay = 1_000;
+const suggestionDelay = 75;
+const outlineDelay = 150;
 const minDiagramZoom = 0.25;
 const maxDiagramZoom = 3;
 const diagramZoomFactor = 1.1;
@@ -121,6 +125,8 @@ export class WebIdeWorkbench {
   readonly #workspaceListeners = new Set<() => void>();
   readonly #diagram = new DiagramController();
   readonly #outlineCollapsed = new Set<string>();
+  readonly #suggestionRefresh = new DebouncedTask(suggestionDelay);
+  readonly #outlineRefresh = new DebouncedTask(outlineDelay);
   readonly #outlineEntries = new Map<
     string,
     {
@@ -141,6 +147,7 @@ export class WebIdeWorkbench {
   #activeView = "explorer";
   #openEditorsCollapsed = false;
   #sidebarGeneration = 0;
+  #outlineGeneration = 0;
   #diagramGeneration = 0;
   #diagramLayout: LayoutDiagram | null = null;
   #diagramViewport: AnchoredViewport | null = null;
@@ -583,7 +590,7 @@ export class WebIdeWorkbench {
       clearTimeout(tab.autoSaveTimer);
       tab.autoSaveTimer = null;
     }
-    tab.dirty = false;
+    updateDirtyState(tab, false);
     this.languageService.markSaved(tab.model.uri.toString());
     await this.#recovery.clear(tab.model.uri.toString());
     this.#renderTabs();
@@ -660,7 +667,7 @@ export class WebIdeWorkbench {
         this.#required("#breadcrumbs").textContent = "No file open";
         this.#required("#cursor-status").textContent = "Ln 1, Col 1";
         this.#renderTabs();
-        this.#renderOutline();
+        void this.#renderOutline();
       }
     } else this.#renderTabs();
   }
@@ -673,8 +680,10 @@ export class WebIdeWorkbench {
     const next = document.createElement("div");
     if (activeView === "explorer") await this.#renderExplorer(next);
     else if (activeView === "search") this.#renderSearch(next);
-    else if (activeView === "outline") this.#renderOutline(next);
-    else if (activeView === "settings") this.#renderSettings(next);
+    else if (activeView === "outline") {
+      this.#outlineRefresh.cancel();
+      await this.#renderOutline(next);
+    } else if (activeView === "settings") this.#renderSettings(next);
     else if (activeView === "scm") {
       if (this.#sourceControlRenderer)
         next.append(await this.#sourceControlRenderer());
@@ -875,6 +884,7 @@ export class WebIdeWorkbench {
         this.#selectPanelView(panelView);
       const view = target.dataset.view;
       if (view) {
+        this.#cancelDeferredEditorRefreshes();
         this.#activeView = view;
         for (const button of this.host.querySelectorAll<HTMLElement>(
           "[data-view]",
@@ -890,6 +900,7 @@ export class WebIdeWorkbench {
       const command = target.dataset.command;
       if (command === "command-palette") this.#showCommandPalette();
       else if (command === "toggle-search") {
+        this.#cancelDeferredEditorRefreshes();
         this.#activeView = "search";
         void this.renderSidebar();
       } else if (command === "switch-workspace") this.#showWorkspacePicker();
@@ -1088,6 +1099,7 @@ export class WebIdeWorkbench {
       label.addEventListener("click", () => this.#activateTab(tab));
       const close = document.createElement("button");
       close.className = "open-editor-close";
+      close.tabIndex = 0;
       if (tab.dirty) close.classList.add("dirty-close");
       close.setAttribute("aria-label", `Close ${tab.label}`);
       close.title = `Close ${tab.label}`;
@@ -1139,14 +1151,29 @@ export class WebIdeWorkbench {
     }
   }
 
-  #renderOutline(host = this.#required("#sidebar-content")): void {
+  async #renderOutline(
+    host = this.#required("#sidebar-content"),
+  ): Promise<void> {
     if (this.#activeView !== "outline") return;
+    const generation = ++this.#outlineGeneration;
+    this.#outlineRefresh.cancel();
     host.replaceChildren();
     this.#outlineEntries.clear();
     const model = this.#primary?.getModel();
     if (!model) return;
     const uri = model.uri.toString();
-    const symbols = this.languageService.symbols(uri);
+    const version = model.getVersionId();
+    const symbols = await this.languageService.waitForDocumentSymbols(
+      uri,
+      version,
+    );
+    if (
+      this.#activeView !== "outline" ||
+      generation !== this.#outlineGeneration ||
+      this.#primary.getModel() !== model ||
+      model.getVersionId() !== version
+    )
+      return;
     if (symbols.length === 0) {
       host.append(
         Object.assign(document.createElement("p"), {
@@ -1207,7 +1234,7 @@ export class WebIdeWorkbench {
           if (this.#outlineCollapsed.has(storageKey))
             this.#outlineCollapsed.delete(storageKey);
           else this.#outlineCollapsed.add(storageKey);
-          this.#renderOutline();
+          void this.#renderOutline();
         });
         row.append(toggle);
       } else {
@@ -1305,7 +1332,7 @@ export class WebIdeWorkbench {
     if (this.#activeView !== "outline") return;
     for (const [key, entry] of this.#outlineEntries)
       if (entry.symbol.children.length > 0) this.#outlineCollapsed.add(key);
-    this.#renderOutline();
+    void this.#renderOutline();
   }
 
   #renderSettings(host: HTMLElement): void {
@@ -1652,6 +1679,7 @@ export class WebIdeWorkbench {
       label.addEventListener("click", () => this.#activateTab(tab));
       const close = document.createElement("button");
       close.className = "tab-close";
+      close.tabIndex = 0;
       if (tab.dirty) close.classList.add("dirty-close");
       close.setAttribute("aria-label", `Close ${tab.label}`);
       close.title = `Close ${tab.label}`;
@@ -1667,11 +1695,13 @@ export class WebIdeWorkbench {
   #activateTab(tab: OpenTab): void {
     if (this.#primary.getModel() !== tab.model)
       this.#primary.setModel(tab.model);
-    this.#reflectActiveTab(tab);
+    if (this.#activePath !== tab.path) this.#reflectActiveTab(tab);
     this.#primary.focus();
   }
 
   #reflectActiveTab(tab: OpenTab): void {
+    if (this.#activePath === tab.path) return;
+    this.#cancelDeferredEditorRefreshes();
     this.#activePath = tab.path;
     this.#primary.updateOptions({ readOnly: tab.readOnly });
     if (this.#secondary) {
@@ -1682,19 +1712,19 @@ export class WebIdeWorkbench {
       ? `Repository › ${tab.label}`
       : tab.path.split("/").filter(Boolean).join(" › ");
     this.#renderTabs();
-    this.#renderOutline();
+    void this.#renderOutline();
   }
 
   #onModelChanged(tab: OpenTab): void {
     if (tab.readOnly) return;
-    tab.dirty = true;
+    const becameDirty = updateDirtyState(tab, true);
     this.#required("#result-status").textContent = "outdated — save or compile";
     this.#required("#compile-status").textContent = "INTERLIS: outdated";
     const saved = this.languageService.getSavedSemanticSnapshot(
       tab.model.uri.toString(),
     );
     if (saved?.value) this.#diagram.publish(saved.value, "stale");
-    this.#renderTabs();
+    if (becameDirty) this.#renderTabs();
     if (tab.recoveryTimer) clearTimeout(tab.recoveryTimer);
     tab.recoveryTimer = setTimeout(() => {
       tab.recoveryTimer = null;
@@ -1705,15 +1735,17 @@ export class WebIdeWorkbench {
       );
     }, 250);
     this.#scheduleAutoSave(tab);
-    if (tab.path === this.#activePath) {
-      void this.#refreshSuggestions(this.#primary);
-    }
-    this.#renderOutline();
+    if (tab.path === this.#activePath)
+      this.#suggestionRefresh.schedule(
+        () => void this.#refreshSuggestions(this.#primary),
+      );
+    if (tab.path === this.#activePath && this.#activeView === "outline")
+      this.#outlineRefresh.schedule(() => void this.#renderOutline());
   }
 
   #registerSnippetNavigation(): void {
-    const context =
-      "editorTextFocus && editorLangId == 'interlis' && inSnippetMode && !suggestWidgetVisible";
+    const snippetContext =
+      "editorTextFocus && editorLangId == 'interlis' && inSnippetMode";
     const navigate = () => {
       this.#primary.trigger(
         "interlis.snippetNavigation",
@@ -1722,8 +1754,12 @@ export class WebIdeWorkbench {
       );
       window.setTimeout(() => void this.#refreshSuggestions(this.#primary), 0);
     };
-    this.#primary.addCommand(monaco.KeyCode.Enter, navigate, context);
-    this.#primary.addCommand(monaco.KeyCode.Tab, navigate, context);
+    this.#primary.addCommand(
+      monaco.KeyCode.Enter,
+      navigate,
+      `${snippetContext} && !suggestWidgetVisible`,
+    );
+    this.#primary.addCommand(monaco.KeyCode.Tab, navigate, snippetContext);
   }
 
   async #refreshSuggestions(target: editor.ICodeEditor): Promise<void> {
@@ -2398,6 +2434,7 @@ export class WebIdeWorkbench {
   }
 
   #disposeTabs(): void {
+    this.#cancelDeferredEditorRefreshes();
     this.#primary.setModel(null);
     this.#secondary?.setModel(null);
     for (const tab of this.#tabs.values()) {
@@ -2409,6 +2446,11 @@ export class WebIdeWorkbench {
     this.#tabs.clear();
     this.#activePath = null;
     this.#renderTabs();
+  }
+
+  #cancelDeferredEditorRefreshes(): void {
+    this.#suggestionRefresh.cancel();
+    this.#outlineRefresh.cancel();
   }
 
   #configureInterlis(): void {

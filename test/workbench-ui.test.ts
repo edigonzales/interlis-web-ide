@@ -1,12 +1,16 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   clampSplitSize,
+  DebouncedTask,
   defaultWorkbenchLayoutSettings,
   outlineCodiconName,
   parseWorkbenchLayoutSettings,
+  updateDirtyState,
 } from "../src/workbench/ui-state.js";
 
 describe("workbench UI state", () => {
+  afterEach(() => vi.useRealTimers());
+
   it("parses and bounds versioned layout settings", () => {
     expect(
       parseWorkbenchLayoutSettings(
@@ -49,5 +53,48 @@ describe("workbench UI state", () => {
     expect(outlineCodiconName("constant")).toBe("symbol-constant");
     expect(outlineCodiconName("interface")).toBe("symbol-interface");
     expect(outlineCodiconName("unknown")).toBe("symbol-misc");
+  });
+
+  it("runs only the latest suggestion and outline task in an edit burst", () => {
+    vi.useFakeTimers();
+    const suggestions = vi.fn();
+    const outlines = vi.fn();
+    const suggestionTask = new DebouncedTask(75);
+    const outlineTask = new DebouncedTask(150);
+
+    for (let index = 0; index < 100; index += 1) {
+      suggestionTask.schedule(() => {
+        suggestions(index);
+      });
+      outlineTask.schedule(() => {
+        outlines(index);
+      });
+    }
+    vi.advanceTimersByTime(74);
+    expect(suggestions).not.toHaveBeenCalled();
+    vi.advanceTimersByTime(1);
+    expect(suggestions).toHaveBeenCalledOnce();
+    expect(suggestions).toHaveBeenCalledWith(99);
+    vi.advanceTimersByTime(75);
+    expect(outlines).toHaveBeenCalledOnce();
+    expect(outlines).toHaveBeenCalledWith(99);
+  });
+
+  it("cancels deferred work and renders dirty state only on transitions", () => {
+    vi.useFakeTimers();
+    const task = new DebouncedTask(75);
+    const deferred = vi.fn();
+    task.schedule(deferred);
+    task.cancel();
+    vi.runAllTimers();
+    expect(deferred).not.toHaveBeenCalled();
+
+    const tab = { dirty: false };
+    const renders = vi.fn();
+    for (let index = 0; index < 100; index += 1)
+      if (updateDirtyState(tab, true)) renders();
+    expect(renders).toHaveBeenCalledOnce();
+    expect(updateDirtyState(tab, false)).toBe(true);
+    expect(updateDirtyState(tab, false)).toBe(false);
   });
 });
