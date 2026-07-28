@@ -8,8 +8,9 @@ test("runs shared language tooling and live exports", async ({ page }) => {
   const diagram = page.getByRole("region", {
     name: "Live INTERLIS diagram",
   });
-  await expect(diagram).toContainText("Save or compile");
-  await page.getByRole("button", { name: "Run", exact: true }).click();
+  await expect(diagram.locator("svg")).toBeVisible();
+  await expect(page.locator("#compile-status")).toContainText("compiled");
+  await page.getByRole("button", { name: "Compile", exact: true }).click();
   await expect(page.locator("#output")).toContainText(
     /ilic completed with no errors, no warnings\. \d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}/u,
   );
@@ -30,6 +31,7 @@ test("runs shared language tooling and live exports", async ({ page }) => {
     .toContain("ORTHOGONAL");
 
   await page.getByRole("button", { name: /PROBLEMS/u }).click();
+  await expect(page.locator("#problem-count")).toBeHidden();
   await expect(page.locator("#problems")).toContainText("0 errors, 0 warnings");
   await page.getByRole("button", { name: "OUTPUT", exact: true }).click();
   await expect(page.locator("#output")).toBeVisible();
@@ -41,6 +43,48 @@ test("runs shared language tooling and live exports", async ({ page }) => {
   const docxDownload = page.waitForEvent("download");
   await diagram.getByRole("button", { name: "DOCX", exact: true }).click();
   expect((await docxDownload).suggestedFilename()).toMatch(/\.docx$/u);
+});
+
+test("navigates class snippets and suppresses empty suggestions", async ({
+  page,
+}) => {
+  await page.goto("./");
+  await expect(page.locator("#compile-status")).toContainText("compiled");
+
+  const editor = page.getByRole("textbox", { name: "Editor content" }).first();
+  await editor.focus();
+  const modifier = await page.evaluate(() =>
+    navigator.userAgent.includes("Macintosh") ? "Meta" : "Control",
+  );
+  await page.keyboard.press(modifier + "+A");
+  await page.keyboard.insertText(
+    "INTERLIS 2.4;\nMODEL M =\n  TOPIC T =\n    \n",
+  );
+  await page.keyboard.type("CLASS");
+  await expect(page.locator(".suggest-widget .monaco-list-row")).toHaveCount(2);
+  await page.keyboard.press("ArrowDown");
+  await page.keyboard.press("Enter");
+  await page.keyboard.type("Item");
+  await expect(page.locator(".suggest-widget")).toBeHidden();
+
+  await page.keyboard.press("Enter");
+  const rows = page.locator(".suggest-widget .monaco-list-row");
+  await expect(rows.filter({ hasText: "(ABSTRACT)" })).toBeVisible();
+  await expect(rows.filter({ hasText: "(EXTENDED)" })).toBeVisible();
+  await expect(rows.filter({ hasText: "(FINAL)" })).toBeVisible();
+  await expect(rows.filter({ hasText: "EXTENDS" })).toBeVisible();
+
+  const sourceAfterHeader = await page.locator(".view-lines").innerText();
+  expect(sourceAfterHeader).toMatch(/CLASS\s+Item\s*=/u);
+
+  await page.keyboard.press("Escape");
+  await page.keyboard.press("Tab");
+  await page.keyboard.insertText("label : TEXT*255;");
+  await expect(page.locator(".suggest-widget")).toBeHidden();
+  const sourceAfterBody = await page.locator(".view-lines").innerText();
+  expect(sourceAfterBody).toMatch(/label\s*:\s*TEXT\*255;/u);
+  expect(sourceAfterBody.match(/END\s+Item;/gu)).toHaveLength(1);
+  expect(sourceAfterBody).not.toContain("No suggestions");
 });
 
 test("save replaces structured Problems and compiler Output together", async ({
@@ -112,7 +156,12 @@ END Valid.
 
   const problem = page.locator("#problems .problem-row").first();
   await expect(problem).toBeVisible();
+  await expect(page.locator("#problem-count")).toBeVisible();
   await expect(page.locator("#problem-count")).not.toHaveText("0");
+  await expect(page.locator("#diagram-host svg")).toHaveCount(0);
+  await expect(
+    page.getByRole("region", { name: "Live INTERLIS diagram" }),
+  ).toContainText("Diagram unavailable");
   await problem.click();
   await expect(page.locator("#cursor-status")).not.toHaveText("Ln 1, Col 1");
   await page.getByRole("button", { name: "OUTPUT", exact: true }).click();
@@ -130,6 +179,7 @@ END Valid.
   await expect(page.locator("#compile-status")).toContainText("compiled");
   await page.getByRole("button", { name: /PROBLEMS/u }).click();
   await expect(page.locator("#problems .problem-row")).toHaveCount(0);
+  await expect(page.locator("#problem-count")).toBeHidden();
   await expect(page.locator("#problems")).toContainText("0 errors, 0 warnings");
   await page.getByRole("button", { name: "OUTPUT", exact: true }).click();
   await expect(page.locator("#output")).toContainText(
@@ -249,9 +299,10 @@ END Root.
 
   await ctrlClickUnits();
 
-  await expect(page.getByRole("button", { name: /Units\.ili/u })).toContainText(
-    "🔒",
-  );
+  const unitsTab = page
+    .locator("#tabs")
+    .getByRole("button", { name: "Units.ili", exact: true });
+  await expect(unitsTab.locator(".codicon-lock")).toBeVisible();
   await page.keyboard.press("Control+A");
   await page.keyboard.insertText("CHANGED");
   await expect(
@@ -262,7 +313,7 @@ END Root.
 
   await page
     .locator("#tabs")
-    .getByRole("button", { name: /Model\.ili/u })
+    .getByRole("button", { name: "Model.ili", exact: true })
     .click();
   await page.keyboard.press(`${definitionModifier}+S`);
   await expect(
@@ -274,7 +325,7 @@ END Root.
   await page.unroute("https://models.example/**");
   await page.context().setOffline(true);
   await page.reload();
-  await page.getByRole("button", { name: "Run", exact: true }).click();
+  await page.getByRole("button", { name: "Compile", exact: true }).click();
   await expect(page.locator("#output")).toContainText(
     "ilic completed with no errors, no warnings.",
   );

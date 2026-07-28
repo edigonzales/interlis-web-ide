@@ -6,7 +6,9 @@ test("shallow-clones the public SOGIS INTERLIS repository", async ({
   test.skip(!process.env.RUN_PUBLIC_CLONE, "Public network smoke is opt-in");
   test.setTimeout(240_000);
   await page.goto("./");
-  await page.getByRole("button", { name: "⑂", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Source Control", exact: true })
+    .click();
   page.once("dialog", (dialog) => dialog.accept());
   await page
     .getByRole("button", { name: "Clone Repository", exact: true })

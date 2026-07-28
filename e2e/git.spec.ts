@@ -4,7 +4,9 @@ test("stages, commits and restores a local repository", async ({ page }) => {
   test.setTimeout(60_000);
   await page.goto("./");
   await expect(page.getByText("No Git", { exact: true })).toBeVisible();
-  await page.getByRole("button", { name: "⑂", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Source Control", exact: true })
+    .click();
   await page
     .getByRole("button", { name: "Initialize Repository", exact: true })
     .click();
@@ -29,7 +31,9 @@ test("stages, commits and restores a local repository", async ({ page }) => {
     page.getByText("No local changes.", { exact: true }),
   ).toBeVisible();
   await page.reload();
-  await page.getByRole("button", { name: "⑂", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Source Control", exact: true })
+    .click();
   await expect(
     page.getByText("No local changes.", { exact: true }),
   ).toBeVisible();
