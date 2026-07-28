@@ -1,7 +1,37 @@
 import { describe, expect, it } from "vitest";
-import { browserRepositoryUrls } from "../src/language-repository.js";
+import {
+  browserRepositoryUrls,
+  defaultRepositorySetting,
+  geoadminMirrorRepository,
+  interlisMirrorRepository,
+  masterRepository,
+  repositorySettingEntries,
+  serializeRepositorySetting,
+} from "../src/language-repository.js";
 
 describe("browser repository configuration", () => {
+  it("uses explicit mirrors followed by the master repository by default", () => {
+    expect(defaultRepositorySetting).toBe(
+      `%ILI_DIR;${interlisMirrorRepository};${geoadminMirrorRepository};${masterRepository}`,
+    );
+    expect(repositorySettingEntries(defaultRepositorySetting)).toEqual([
+      "%ILI_DIR",
+      interlisMirrorRepository,
+      geoadminMirrorRepository,
+      masterRepository,
+    ]);
+  });
+
+  it("serializes structured repository entries without trailing slashes", () => {
+    expect(
+      serializeRepositorySetting([
+        "%ILI_DIR",
+        "https://custom.example/models/",
+        "https://custom.example/models",
+      ]),
+    ).toBe("%ILI_DIR;https://custom.example/models");
+  });
+
   it("maps the central repository to both temporary CORS mirrors", () => {
     expect(
       browserRepositoryUrls(
