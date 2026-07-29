@@ -56,6 +56,38 @@ export const workbenchTemplate = `
         </div>
       </form>
     </dialog>
+    <dialog class="close-editor-dialog" id="delete-file-dialog" aria-labelledby="delete-file-title" aria-describedby="delete-file-message">
+      <form>
+        <h2 id="delete-file-title">Delete file?</h2>
+        <p id="delete-file-message"></p>
+        <div class="dialog-actions">
+          <button type="button" data-delete-file-action="cancel">Cancel</button>
+          <button type="button" data-delete-file-action="delete">Delete</button>
+          <button type="button" class="dialog-primary" data-delete-file-action="save-delete">Save &amp; Delete</button>
+        </div>
+      </form>
+    </dialog>
+    <dialog class="close-editor-dialog" id="delete-workspace-dialog" aria-labelledby="delete-workspace-title" aria-describedby="delete-workspace-message">
+      <form>
+        <h2 id="delete-workspace-title">Delete workspace?</h2>
+        <p id="delete-workspace-message"></p>
+        <div class="dialog-actions">
+          <button type="button" data-delete-workspace-action="cancel">Cancel</button>
+          <button type="button" class="dialog-primary" data-delete-workspace-action="delete">Delete Workspace</button>
+        </div>
+      </form>
+    </dialog>
+    <dialog class="close-editor-dialog" id="workspace-name-dialog" aria-labelledby="workspace-name-title">
+      <form>
+        <h2 id="workspace-name-title">Rename workspace</h2>
+        <label class="dialog-field" for="workspace-name-input">Name</label>
+        <input id="workspace-name-input" class="dialog-input" type="text" autocomplete="off" />
+        <div class="dialog-actions">
+          <button type="button" data-workspace-name-action="cancel">Cancel</button>
+          <button type="submit" class="dialog-primary">Save</button>
+        </div>
+      </form>
+    </dialog>
     <input id="zip-input" type="file" accept=".zip,application/zip" hidden />
   </div>
 `;

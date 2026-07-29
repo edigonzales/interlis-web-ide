@@ -159,9 +159,11 @@ test("light-dismisses the compact Codicon command palette", async ({
     "View: Split Editor",
     "View: Toggle Live Diagram",
     "View: Toggle Panel",
+    "Workspace: Delete Current Workspace…",
     "Workspace: Export ZIP",
     "Workspace: Import ZIP…",
     "Workspace: New Named Workspace",
+    "Workspace: Rename Current Workspace…",
   ]);
   await page.locator("#quick-input").fill(">export");
   expect(await page.locator("#quick-items button").allTextContents()).toEqual([

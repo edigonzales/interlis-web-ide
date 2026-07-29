@@ -206,6 +206,16 @@ export class WebIdeWorkbench {
         run: () => this.newWorkspace(),
       },
       {
+        id: "rename-workspace",
+        label: "Workspace: Rename Current Workspace…",
+        run: () => this.renameWorkspace(),
+      },
+      {
+        id: "delete-workspace",
+        label: "Workspace: Delete Current Workspace…",
+        run: () => this.deleteWorkspace(),
+      },
+      {
         id: "split",
         label: "View: Split Editor",
         run: () => this.toggleSplit(),
@@ -608,6 +618,58 @@ export class WebIdeWorkbench {
     if (tab) await this.#requestCloseTab(tab);
   }
 
+  private async deleteFile(path: string): Promise<void> {
+    const normalized = normalizePath(path);
+    const tab = this.#tabs.get(normalized);
+    const dialog = this.#required<HTMLDialogElement>("#delete-file-dialog");
+    const title = this.#required("#delete-file-title");
+    const message = this.#required("#delete-file-message");
+    const saveDelete = this.#required<HTMLButtonElement>(
+      '[data-delete-file-action="save-delete"]',
+    );
+    const deleteButton = this.#required<HTMLButtonElement>(
+      '[data-delete-file-action="delete"]',
+    );
+    title.textContent = normalized.toLowerCase().endsWith(".ili")
+      ? "Delete model?"
+      : "Delete file?";
+    message.textContent = `Delete ${normalized}? This cannot be undone.`;
+    saveDelete.classList.toggle("hidden", !tab?.dirty);
+    deleteButton.textContent = tab?.dirty ? "Delete without Saving" : "Delete";
+    dialog.returnValue = "cancel";
+    dialog.showModal();
+    const decision = await this.#waitForDialog(dialog);
+    if (decision === "cancel") return;
+
+    if (decision === "save-delete" && tab) {
+      try {
+        await this.#saveTab(tab, false);
+      } catch (error) {
+        this.logError(`Save ${normalized}`, error);
+        return;
+      }
+    }
+
+    try {
+      await this.#workspace.delete(normalized);
+    } catch (error) {
+      this.logError(`Delete ${normalized}`, error);
+      return;
+    }
+    if (tab && this.#tabs.has(normalized)) await this.#closeTab(tab);
+    await this.#syncWorkspaceSources();
+    await this.renderSidebar();
+    const active = this.#activePath
+      ? this.#tabs.get(this.#activePath)
+      : undefined;
+    if (active && normalized.toLowerCase().endsWith(".ili"))
+      await this.languageService.compileDocument(
+        active.model.uri.toString(),
+        "save",
+      );
+    this.#log(`Deleted ${normalized}`);
+  }
+
   async #requestCloseTab(tab: OpenTab): Promise<boolean> {
     if (tab.dirty && !tab.readOnly) {
       const decision = await this.#confirmClose(tab);
@@ -641,6 +703,14 @@ export class WebIdeWorkbench {
         },
         { once: true },
       );
+    });
+  }
+
+  #waitForDialog(dialog: HTMLDialogElement): Promise<string> {
+    return new Promise((resolve) => {
+      dialog.addEventListener("close", () => resolve(dialog.returnValue), {
+        once: true,
+      });
     });
   }
 
@@ -856,6 +926,70 @@ export class WebIdeWorkbench {
     this.#log(`Created ${descriptor.name}`);
   }
 
+  private async renameWorkspace(
+    id = this.manager.activeDescriptor?.id,
+  ): Promise<void> {
+    const descriptor = this.manager.workspaces.find(
+      (candidate) => candidate.id === id,
+    );
+    if (!descriptor) {
+      this.#log("Only named workspaces can be renamed in the IDE.");
+      return;
+    }
+    const dialog = this.#required<HTMLDialogElement>("#workspace-name-dialog");
+    const input = this.#required<HTMLInputElement>("#workspace-name-input");
+    input.value = descriptor.name;
+    dialog.returnValue = "cancel";
+    dialog.showModal();
+    input.focus();
+    input.select();
+    if ((await this.#waitForDialog(dialog)) !== "save") return;
+    try {
+      await this.manager.rename(descriptor.id, input.value);
+      this.#updateWorkspaceStatus();
+      await this.renderSidebar();
+      this.#log(
+        `Renamed workspace to ${this.manager.activeDescriptor?.name ?? input.value}`,
+      );
+    } catch (error) {
+      this.logError("Rename workspace", error);
+    }
+  }
+
+  private async deleteWorkspace(
+    id = this.manager.activeDescriptor?.id,
+  ): Promise<void> {
+    const descriptor = this.manager.workspaces.find(
+      (candidate) => candidate.id === id,
+    );
+    if (!descriptor) {
+      this.#log("Only named workspaces can be deleted in the IDE.");
+      return;
+    }
+    if (this.manager.workspaces.length === 1) {
+      this.#log("The last workspace cannot be deleted.");
+      return;
+    }
+    const dialog = this.#required<HTMLDialogElement>(
+      "#delete-workspace-dialog",
+    );
+    this.#required("#delete-workspace-message").textContent =
+      `Delete workspace “${descriptor.name}”? All files in it will be deleted.`;
+    dialog.returnValue = "cancel";
+    dialog.showModal();
+    if ((await this.#waitForDialog(dialog)) !== "delete") return;
+    const wasActive = this.manager.activeDescriptor?.id === descriptor.id;
+    try {
+      await this.manager.remove(descriptor.id);
+      if (wasActive)
+        await this.#switchFileSystem(this.manager.activeFileSystem);
+      else await this.renderSidebar();
+      this.#log(`Deleted workspace ${descriptor.name}`);
+    } catch (error) {
+      this.logError("Delete workspace", error);
+    }
+  }
+
   private pickZip(): void {
     this.#required<HTMLInputElement>("#zip-input").click();
   }
@@ -941,6 +1075,58 @@ export class WebIdeWorkbench {
     closeDialog.addEventListener("cancel", () => {
       closeDialog.returnValue = "cancel";
     });
+    const deleteFileDialog = this.#required<HTMLDialogElement>(
+      "#delete-file-dialog",
+    );
+    for (const button of deleteFileDialog.querySelectorAll<HTMLButtonElement>(
+      "[data-delete-file-action]",
+    )) {
+      button.addEventListener("click", () => {
+        deleteFileDialog.returnValue =
+          button.dataset.deleteFileAction ?? "cancel";
+        deleteFileDialog.close();
+      });
+    }
+    deleteFileDialog.addEventListener("cancel", () => {
+      deleteFileDialog.returnValue = "cancel";
+    });
+    const deleteWorkspaceDialog = this.#required<HTMLDialogElement>(
+      "#delete-workspace-dialog",
+    );
+    for (const button of deleteWorkspaceDialog.querySelectorAll<HTMLButtonElement>(
+      "[data-delete-workspace-action]",
+    )) {
+      button.addEventListener("click", () => {
+        deleteWorkspaceDialog.returnValue =
+          button.dataset.deleteWorkspaceAction ?? "cancel";
+        deleteWorkspaceDialog.close();
+      });
+    }
+    deleteWorkspaceDialog.addEventListener("cancel", () => {
+      deleteWorkspaceDialog.returnValue = "cancel";
+    });
+    const workspaceNameDialog = this.#required<HTMLDialogElement>(
+      "#workspace-name-dialog",
+    );
+    for (const button of workspaceNameDialog.querySelectorAll<HTMLButtonElement>(
+      "[data-workspace-name-action]",
+    )) {
+      button.addEventListener("click", () => {
+        workspaceNameDialog.returnValue =
+          button.dataset.workspaceNameAction ?? "cancel";
+        workspaceNameDialog.close();
+      });
+    }
+    workspaceNameDialog.addEventListener("cancel", () => {
+      workspaceNameDialog.returnValue = "cancel";
+    });
+    workspaceNameDialog
+      .querySelector("form")
+      ?.addEventListener("submit", (event) => {
+        event.preventDefault();
+        workspaceNameDialog.returnValue = "save";
+        workspaceNameDialog.close();
+      });
     window.addEventListener(
       "pointerdown",
       (event) => {
@@ -1033,10 +1219,14 @@ export class WebIdeWorkbench {
       if (name === ".recovery" || name === ".interlis" || name === ".git")
         continue;
       const child = normalizePath(`${path}/${name}`);
-      const row = document.createElement("button");
+      const row = document.createElement("div");
       row.className = `file-row ${type}`;
       row.style.paddingLeft = `${8 + depth * 14}px`;
-      row.append(
+      const label = document.createElement(type === "file" ? "button" : "span");
+      label.className = "file-open";
+      const labelText = document.createElement("span");
+      labelText.textContent = name;
+      label.append(
         this.#icon(
           type === "directory"
             ? "folder-opened"
@@ -1044,10 +1234,25 @@ export class WebIdeWorkbench {
               ? "file-code"
               : "file",
         ),
-        document.createTextNode(name),
+        labelText,
       );
-      if (type === "file")
-        row.addEventListener("click", () => void this.openFile(child));
+      if (type === "file") {
+        label.title = child;
+        label.addEventListener("click", () => void this.openFile(child));
+        const deleteButton = document.createElement("button");
+        deleteButton.className = "file-delete";
+        deleteButton.setAttribute(
+          "aria-label",
+          `${name.toLowerCase().endsWith(".ili") ? "Delete model" : "Delete file"} ${name}`,
+        );
+        deleteButton.title = `${name.toLowerCase().endsWith(".ili") ? "Delete model" : "Delete file"} ${name}`;
+        deleteButton.append(this.#icon("trash"));
+        deleteButton.addEventListener(
+          "click",
+          () => void this.deleteFile(child),
+        );
+        row.append(label, deleteButton);
+      } else row.append(label);
       host.append(row);
       if (type === "directory")
         await this.#appendDirectory(host, child, depth + 1);
@@ -2175,15 +2380,41 @@ export class WebIdeWorkbench {
     input.onkeydown = null;
     items.replaceChildren();
     for (const descriptor of this.manager.workspaces) {
-      const button = document.createElement("button");
-      button.textContent = descriptor.name;
-      button.addEventListener("click", () => {
+      const row = document.createElement("div");
+      row.className = "workspace-row";
+      const select = document.createElement("button");
+      select.className = "workspace-select";
+      select.textContent = descriptor.name;
+      select.addEventListener("click", () => {
         void this.manager.activate(descriptor.id).then(async () => {
           this.#hideQuickPick();
           await this.#switchFileSystem(this.manager.activeFileSystem);
         });
       });
-      items.append(button);
+      const actions = document.createElement("span");
+      actions.className = "workspace-actions";
+      const rename = document.createElement("button");
+      rename.className = "workspace-action";
+      rename.setAttribute("aria-label", `Rename ${descriptor.name}`);
+      rename.title = `Rename ${descriptor.name}`;
+      rename.append(this.#icon("edit"));
+      rename.addEventListener("click", () => {
+        this.#hideQuickPick();
+        void this.renameWorkspace(descriptor.id);
+      });
+      const remove = document.createElement("button");
+      remove.className = "workspace-action";
+      remove.setAttribute("aria-label", `Delete ${descriptor.name}`);
+      remove.title = `Delete ${descriptor.name}`;
+      remove.append(this.#icon("trash"));
+      remove.disabled = this.manager.workspaces.length === 1;
+      remove.addEventListener("click", () => {
+        this.#hideQuickPick();
+        void this.deleteWorkspace(descriptor.id);
+      });
+      actions.append(rename, remove);
+      row.append(select, actions);
+      items.append(row);
     }
     palette.showPopover();
     input.focus();

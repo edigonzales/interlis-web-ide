@@ -66,6 +66,32 @@ describe("named workspaces and recovery", () => {
     vi.restoreAllMocks();
   });
 
+  it("removes a workspace, activates a fallback and protects the last one", async () => {
+    vi.spyOn(crypto, "randomUUID")
+      .mockReturnValueOnce("00000000-0000-4000-8000-000000000001")
+      .mockReturnValueOnce("00000000-0000-4000-8000-000000000002");
+    const root = new MemoryWorkspaceFileSystem();
+    const values = new Map<string, string>();
+    const session = {
+      getItem: (key: string) => values.get(key) ?? null,
+      setItem: (key: string, value: string) => void values.set(key, value),
+      removeItem: (key: string) => void values.delete(key),
+    };
+    const manager = new WorkspaceManager(root, session);
+    const first = await manager.initialize();
+    const second = await manager.create("Second Workspace");
+
+    await manager.activate(first.id);
+    await manager.remove(first.id);
+    expect(manager.activeDescriptor?.id).toBe(second.id);
+    expect(() => root.stat(`/workspaces/${first.id}`)).toThrow();
+
+    await expect(manager.remove(second.id)).rejects.toThrow(
+      "Cannot delete the last workspace",
+    );
+    vi.restoreAllMocks();
+  });
+
   it("recovers and clears unsaved buffers from the active filesystem", async () => {
     const workspace = new MemoryWorkspaceFileSystem();
     const recovery = new BufferRecoveryStore(workspace);

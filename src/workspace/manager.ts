@@ -109,16 +109,15 @@ export class WorkspaceManager {
       (candidate) => candidate.id === id,
     );
     if (!descriptor) return;
+    if (this.#descriptors.length === 1)
+      throw new Error("Cannot delete the last workspace");
+    const wasActive = this.#active?.id === id;
+    await this.opfsRoot.delete(`/workspaces/${id}`, { recursive: true });
     this.#descriptors = this.#descriptors.filter(
       (candidate) => candidate.id !== id,
     );
-    await this.opfsRoot.delete(`/workspaces/${id}`, { recursive: true });
-    if (this.#active?.id === id) {
-      this.#active = null;
-      this.#mounted = null;
-      this.session.removeItem(activeKey);
-    }
     await this.#save();
+    if (wasActive) await this.activate(this.#descriptors[0]!.id);
   }
 
   async #load(): Promise<void> {

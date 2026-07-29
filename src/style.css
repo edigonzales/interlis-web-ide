@@ -279,6 +279,45 @@ button:hover {
   text-align: left;
   font-size: 13px;
 }
+.file-row {
+  padding-right: 2px;
+}
+.file-row:hover {
+  background: var(--hover);
+}
+.file-open {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  height: 23px;
+  align-items: center;
+  gap: 5px;
+  overflow: hidden;
+  text-align: left;
+}
+.file-open:not(:disabled):hover {
+  background: transparent;
+}
+.file-open > :last-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.file-delete {
+  display: grid;
+  width: 24px;
+  height: 23px;
+  flex: none;
+  place-items: center;
+  opacity: 0;
+}
+.file-row:hover .file-delete,
+.file-delete:focus-visible {
+  opacity: 1;
+}
+.file-delete:hover {
+  color: #f48771;
+}
 .file-row.directory {
   font-weight: 600;
 }
@@ -928,6 +967,38 @@ button:hover {
   font-size: 12px;
   text-align: left;
 }
+#quick-items .workspace-row {
+  display: flex;
+  align-items: center;
+}
+#quick-items .workspace-select {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+#quick-items .workspace-actions {
+  display: flex;
+  flex: none;
+  opacity: 0;
+}
+#quick-items .workspace-row:hover .workspace-actions,
+#quick-items .workspace-row:focus-within .workspace-actions {
+  opacity: 1;
+}
+#quick-items .workspace-action {
+  display: grid;
+  width: 28px;
+  min-height: 27px;
+  padding: 4px;
+  place-items: center;
+  text-align: center;
+}
+#quick-items .workspace-action:disabled {
+  cursor: not-allowed;
+  opacity: 0.35;
+}
 
 .splitter {
   position: relative;
@@ -989,6 +1060,22 @@ button:hover {
   margin: 0 0 20px;
   color: var(--muted);
   font-size: 13px;
+}
+.dialog-field {
+  display: block;
+  margin-bottom: 5px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.dialog-input {
+  width: 100%;
+  margin-bottom: 20px;
+  padding: 6px 8px;
+  color: var(--foreground);
+  background: var(--editor);
+  border: 1px solid var(--border);
+  font-size: 13px;
+  outline-color: var(--accent);
 }
 .dialog-actions {
   display: flex;
