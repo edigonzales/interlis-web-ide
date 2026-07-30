@@ -159,6 +159,7 @@ export class WebIdeWorkbench {
   #diagramSettings = readDiagramSettings();
   #sourceControlRenderer: (() => HTMLElement | Promise<HTMLElement>) | null =
     null;
+  #dragDepth = 0;
 
   constructor(
     private readonly host: HTMLElement,
@@ -994,6 +995,48 @@ export class WebIdeWorkbench {
     this.#required<HTMLInputElement>("#zip-input").click();
   }
 
+  async #importDroppedFiles(files: FileList | null): Promise<void> {
+    if (!files || files.length === 0) return;
+    if (files.length !== 1) {
+      this.#log("Only one .ili file can be imported at a time.");
+      return;
+    }
+    const file = files[0];
+    if (!file || !file.name.toLowerCase().endsWith(".ili")) {
+      this.#log("Only .ili files can be imported via drag and drop.");
+      return;
+    }
+
+    try {
+      const path = await this.#uniqueDroppedFilePath(file.name);
+      await this.#workspace.write(
+        path,
+        new Uint8Array(await file.arrayBuffer()),
+        { create: true, overwrite: false },
+      );
+      await this.#syncWorkspaceSources();
+      await this.openFile(path);
+      await this.renderSidebar();
+      this.#log(`Imported ${path}`);
+    } catch (error) {
+      this.logError("Import dropped file", error);
+    }
+  }
+
+  async #uniqueDroppedFilePath(fileName: string): Promise<string> {
+    const name = fileName.split(/[\\/]/u).at(-1)?.trim();
+    if (!name || name === "." || name === "..")
+      throw new Error("Dropped file has no valid name.");
+    const path = normalizePath(`/${name}`);
+    if (!(await this.#exists(path))) return path;
+
+    const stem = name.slice(0, -4);
+    for (let index = 2; ; index += 1) {
+      const candidate = normalizePath(`/${stem}-${index}.ili`);
+      if (!(await this.#exists(candidate))) return candidate;
+    }
+  }
+
   async #switchFileSystem(workspace: WorkspaceFileSystem): Promise<void> {
     this.#disposeTabs();
     this.#resetLanguageDocuments();
@@ -1008,6 +1051,37 @@ export class WebIdeWorkbench {
   }
 
   #bindUi(): void {
+    const shell = this.#required<HTMLElement>(".ide-shell");
+    const hasFiles = (event: DragEvent): boolean =>
+      Array.from(event.dataTransfer?.types ?? []).includes("Files");
+    const clearDropState = (): void => {
+      this.#dragDepth = 0;
+      shell.classList.remove("drop-active");
+    };
+    shell.addEventListener("dragenter", (event) => {
+      if (!hasFiles(event)) return;
+      event.preventDefault();
+      this.#dragDepth += 1;
+      shell.classList.add("drop-active");
+    });
+    shell.addEventListener("dragover", (event) => {
+      if (!hasFiles(event)) return;
+      event.preventDefault();
+      if (event.dataTransfer) event.dataTransfer.dropEffect = "copy";
+      shell.classList.add("drop-active");
+    });
+    shell.addEventListener("dragleave", (event) => {
+      if (!hasFiles(event)) return;
+      event.preventDefault();
+      this.#dragDepth = Math.max(0, this.#dragDepth - 1);
+      if (this.#dragDepth === 0) shell.classList.remove("drop-active");
+    });
+    shell.addEventListener("drop", (event) => {
+      if (!hasFiles(event)) return;
+      event.preventDefault();
+      clearDropState();
+      void this.#importDroppedFiles(event.dataTransfer?.files ?? null);
+    });
     this.host.addEventListener("click", (event) => {
       const target = (event.target as HTMLElement).closest<HTMLElement>(
         "[data-command],[data-view],[data-panel-view]",

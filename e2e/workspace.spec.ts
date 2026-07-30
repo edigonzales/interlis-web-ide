@@ -25,6 +25,126 @@ test("exports a workspace ZIP", async ({ page }) => {
   expect(download.suggestedFilename()).toMatch(/\.zip$/u);
 });
 
+test("imports and opens one .ili file via drag and drop", async ({ page }) => {
+  await page.goto("./");
+  await expect(page.getByText("INTERLIS 2.4;", { exact: true })).toBeVisible();
+  const shell = page.locator(".ide-shell");
+  const dispatchDrop = async (
+    files: readonly { name: string; body: string }[],
+  ) =>
+    shell.evaluate((element, droppedFiles) => {
+      const transfer = new DataTransfer();
+      for (const droppedFile of droppedFiles)
+        transfer.items.add(
+          new File([droppedFile.body], droppedFile.name, {
+            type: "text/plain",
+          }),
+        );
+      element.dispatchEvent(
+        new DragEvent("drop", {
+          bubbles: true,
+          cancelable: true,
+          dataTransfer: transfer,
+        }),
+      );
+    }, files);
+
+  await dispatchDrop([
+    {
+      name: "Dropped.ili",
+      body: "INTERLIS 2.4;\nMODEL Dropped =\nEND Dropped.\n",
+    },
+  ]);
+  await expect(
+    page.locator("#tabs").getByRole("button", {
+      name: "Dropped.ili",
+      exact: true,
+    }),
+  ).toBeVisible();
+  await expect(
+    page.locator(".file-tree").getByRole("button", {
+      name: "Dropped.ili",
+      exact: true,
+    }),
+  ).toBeVisible();
+  await expect(
+    page.locator(".view-line").filter({ hasText: "MODEL Dropped =" }),
+  ).toBeVisible();
+  await expect(page.locator("#activity-status")).toHaveText(
+    "Imported /Dropped.ili",
+  );
+
+  await dispatchDrop([
+    {
+      name: "Dropped.ili",
+      body: "INTERLIS 2.4;\nMODEL DroppedAgain =\nEND DroppedAgain.\n",
+    },
+  ]);
+  await expect(
+    page.locator("#tabs").getByRole("button", {
+      name: "Dropped-2.ili",
+      exact: true,
+    }),
+  ).toBeVisible();
+
+  await page.reload();
+  await expect(
+    page.locator(".file-tree").getByRole("button", {
+      name: "Dropped.ili",
+      exact: true,
+    }),
+  ).toBeVisible();
+  await expect(
+    page.locator(".file-tree").getByRole("button", {
+      name: "Dropped-2.ili",
+      exact: true,
+    }),
+  ).toBeVisible();
+  await expect(
+    page.locator("#tabs .tab-label").filter({
+      hasText: /Dropped(?:-2)?\.ili/u,
+    }),
+  ).toBeVisible();
+});
+
+test("rejects unsupported or multiple dropped files", async ({ page }) => {
+  await page.goto("./");
+  await expect(page.getByText("INTERLIS 2.4;", { exact: true })).toBeVisible();
+  const shell = page.locator(".ide-shell");
+  const dispatchDrop = async (
+    files: readonly { name: string; body: string }[],
+  ) =>
+    shell.evaluate((element, droppedFiles) => {
+      const transfer = new DataTransfer();
+      for (const droppedFile of droppedFiles)
+        transfer.items.add(
+          new File([droppedFile.body], droppedFile.name, {
+            type: "text/plain",
+          }),
+        );
+      element.dispatchEvent(
+        new DragEvent("drop", {
+          bubbles: true,
+          cancelable: true,
+          dataTransfer: transfer,
+        }),
+      );
+    }, files);
+
+  await dispatchDrop([{ name: "notes.txt", body: "not an INTERLIS model" }]);
+  await expect(page.locator("#activity-status")).toHaveText(
+    "Only .ili files can be imported via drag and drop.",
+  );
+
+  await dispatchDrop([
+    { name: "One.ili", body: "INTERLIS 2.4;" },
+    { name: "Two.ili", body: "INTERLIS 2.4;" },
+  ]);
+  await expect(page.locator("#activity-status")).toHaveText(
+    "Only one .ili file can be imported at a time.",
+  );
+});
+
 test("deletes a model from the Explorer after confirmation", async ({
   page,
 }) => {
