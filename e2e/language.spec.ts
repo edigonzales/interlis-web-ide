@@ -87,6 +87,110 @@ test("navigates class snippets and suppresses empty suggestions", async ({
   expect(sourceAfterBody).not.toContain("No suggestions");
 });
 
+test("keeps unused-import warnings in dirty and saved states", async ({
+  page,
+  browserName,
+}) => {
+  test.skip(browserName !== "chromium", "Live marker smoke is run once");
+  test.setTimeout(60_000);
+  const workspaceId = `unused-import-e2e-${browserName}-${Date.now()}`;
+  await page.goto("./icon.svg");
+  await page.evaluate(
+    async ({ id, rootSource, importedSource }) => {
+      sessionStorage.setItem("interlis-web-ide.active-workspace", id);
+      const root = await navigator.storage.getDirectory();
+      const metadata = await root.getDirectoryHandle(".interlis", {
+        create: true,
+      });
+      const metadataFile = await metadata.getFileHandle("workspaces.json", {
+        create: true,
+      });
+      const metadataWriter = await metadataFile.createWritable();
+      await metadataWriter.write(
+        JSON.stringify({
+          schemaVersion: 1,
+          workspaces: [
+            {
+              id,
+              name: "Unused Import E2E",
+              kind: "opfs",
+              createdAt: "2026-01-01T00:00:00.000Z",
+            },
+          ],
+        }),
+      );
+      await metadataWriter.close();
+      const workspaces = await root.getDirectoryHandle("workspaces", {
+        create: true,
+      });
+      const workspace = await workspaces.getDirectoryHandle(id, {
+        create: true,
+      });
+      for (const [name, source] of [
+        ["Model.ili", rootSource],
+        ["ZImported.ili", importedSource],
+      ] as const) {
+        const model = await workspace.getFileHandle(name, { create: true });
+        const writer = await model.createWritable();
+        await writer.write(source);
+        await writer.close();
+      }
+    },
+    {
+      id: workspaceId,
+      rootSource: `INTERLIS 2.4;
+MODEL Root (en) AT "https://example.invalid" VERSION "1" =
+  IMPORTS Imported;
+END Root.
+`,
+      importedSource: `INTERLIS 2.4;
+MODEL Imported (en) AT "https://example.invalid" VERSION "1" =
+END Imported.
+`,
+    },
+  );
+  await page.goto("./");
+  await expect(page.locator("#compile-status")).toContainText("compiled");
+
+  const warningMarker = page.locator(".squiggly-warning");
+  await expect(warningMarker).toHaveCount(1);
+
+  const editor = page.getByRole("textbox", { name: "Editor content" }).first();
+  await editor.focus();
+  await page.keyboard.press("Control+End");
+  await page.keyboard.press("Enter");
+  await page.keyboard.insertText("!! dirty");
+  await expect(page.locator("#tabs .tab.active")).toHaveClass(/dirty/u);
+  await expect(warningMarker).toHaveCount(1);
+
+  await page.keyboard.press("Control+S");
+  await expect(page.locator("#compile-status")).toContainText("compiled");
+  await expect(warningMarker).toHaveCount(1);
+});
+
+test("does not show an empty import suggestion widget", async ({ page }) => {
+  await page.goto("./");
+  await expect(page.locator("#compile-status")).toContainText("compiled");
+
+  const editor = page.getByRole("textbox", { name: "Editor content" }).first();
+  await editor.focus();
+  const modifier = await page.evaluate(() =>
+    navigator.userAgent.includes("Macintosh") ? "Meta" : "Control",
+  );
+  await editor.press(modifier + "+A");
+  await page.keyboard.insertText(`INTERLIS 2.4;
+MODEL M =
+  IMPORTS MissingModel;
+END M.
+`);
+
+  const suggestWidget = page.locator(".suggest-widget");
+  await expect(suggestWidget).toBeHidden();
+  await expect(
+    suggestWidget.filter({ hasText: "No suggestions." }),
+  ).toBeHidden();
+});
+
 test("save replaces structured Problems and compiler Output together", async ({
   page,
   browserName,

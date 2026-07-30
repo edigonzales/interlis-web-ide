@@ -43,7 +43,7 @@ async function start(): Promise<void> {
   });
   const languageService = new LanguageService(compiler, {
     editorAnalysis,
-    liveDiagnostics: "off",
+    liveDiagnostics: "conservative",
     modelRepository: createBrowserModelRepository(
       readRepositorySetting(),
       (message) => workbenchRef.current?.logError("Model repository", message),

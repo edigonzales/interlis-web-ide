@@ -323,9 +323,9 @@ export class WebIdeWorkbench {
     this.#bindUi();
     this.#bindResizers();
     await this.#ensureInitialContent();
-    await this.#syncWorkspaceSources();
     await this.#restoreRecovery();
     if (!this.#activePath) await this.#openFirstInterlisFile();
+    await this.#syncWorkspaceSources();
     await this.renderSidebar();
     this.#updateWorkspaceStatus();
     this.#log("OPFS workspace and recovery services are ready.");
@@ -1964,7 +1964,11 @@ export class WebIdeWorkbench {
       navigate,
       `${snippetContext} && !suggestWidgetVisible`,
     );
-    this.#primary.addCommand(monaco.KeyCode.Tab, navigate, snippetContext);
+    this.#primary.addCommand(
+      monaco.KeyCode.Tab,
+      navigate,
+      `${snippetContext} && !suggestWidgetVisible`,
+    );
   }
 
   async #refreshSuggestions(target: editor.ICodeEditor): Promise<void> {
@@ -1976,8 +1980,26 @@ export class WebIdeWorkbench {
     );
     if (!tab || tab.path !== this.#activePath) return;
 
-    const hide = () =>
+    const version = model.getVersionId();
+    const uri = model.uri.toString();
+    const isCurrent = (): boolean => {
+      const currentPosition = target.getPosition();
+      return (
+        target.getModel() === model &&
+        model.getVersionId() === version &&
+        currentPosition?.lineNumber === position.lineNumber &&
+        currentPosition.column === position.column
+      );
+    };
+    const hideOnce = (): void =>
       target.trigger("interlis.suggestionLifecycle", "hideSuggestWidget", null);
+    const hide = (): void => {
+      if (!isCurrent()) return;
+      hideOnce();
+      window.setTimeout(() => {
+        if (isCurrent()) hideOnce();
+      }, 0);
+    };
     const activation = this.languageAdapter.suggestionActivation(
       model,
       position,
@@ -1991,28 +2013,22 @@ export class WebIdeWorkbench {
       return;
     }
 
-    const version = model.getVersionId();
-    const uri = model.uri.toString();
     const items = await this.languageService.completion(uri, {
       line: position.lineNumber - 1,
       character: position.column - 1,
     });
-    const currentPosition = target.getPosition();
-    if (
-      target.getModel() !== model ||
-      model.getVersionId() !== version ||
-      !currentPosition ||
-      currentPosition.lineNumber !== position.lineNumber ||
-      currentPosition.column !== position.column
-    )
-      return;
+    if (!isCurrent()) return;
     if (items.length === 0) hide();
-    else
+    else {
+      hideOnce();
+      await Promise.resolve();
+      if (!isCurrent()) return;
       target.trigger(
         "interlis.suggestionLifecycle",
         "editor.action.triggerSuggest",
         null,
       );
+    }
   }
 
   async #syncWorkspaceSources(path = "/"): Promise<void> {
