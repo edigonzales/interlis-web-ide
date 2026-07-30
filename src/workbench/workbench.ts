@@ -102,6 +102,10 @@ const minDiagramZoom = 0.25;
 const maxDiagramZoom = 3;
 const diagramZoomFactor = 1.1;
 const diagramPadding = 12;
+const hiddenEditorScrollbars: editor.IEditorScrollbarOptions = {
+  vertical: "hidden",
+  horizontal: "hidden",
+};
 
 function clampDiagramZoom(value: number): number {
   return Math.min(maxDiagramZoom, Math.max(minDiagramZoom, value));
@@ -282,6 +286,7 @@ export class WebIdeWorkbench {
       lineHeight: 21,
       minimap: { enabled: true },
       scrollBeyondLastLine: false,
+      scrollbar: hiddenEditorScrollbars,
       glyphMargin: true,
       tabSize: 2,
     });
@@ -2550,6 +2555,7 @@ export class WebIdeWorkbench {
       fontSize: this.#editorSettings.fontSize,
       formatOnType: this.#editorSettings.formatOnType,
       minimap: { enabled: false },
+      scrollbar: hiddenEditorScrollbars,
     });
     this.#syncAuxiliaryLayout();
   }

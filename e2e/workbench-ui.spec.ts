@@ -133,6 +133,39 @@ test("closes the diagram when closing the active model", async ({ page }) => {
   await expect(diagram).toBeHidden();
 });
 
+test("hides Monaco scrollbars while keeping the editor scrollable", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 584, height: 489 });
+  await page.goto("./");
+
+  const editor = page.locator(".monaco-editor");
+  await expect(editor).toBeVisible();
+  await expect(editor.locator(".scrollbar.visible")).toHaveCount(0);
+
+  const textbox = page.getByRole("textbox", {
+    name: "Editor content",
+    exact: true,
+  });
+  await textbox.focus();
+  await page.keyboard.press("ControlOrMeta+A");
+  await page.keyboard.type(
+    Array.from({ length: 30 }, (_, index) => `Line ${index + 1};`).join("\n"),
+  );
+
+  const linesContent = editor.locator(".lines-content");
+  for (let index = 0; index < 40; index++)
+    await page.keyboard.press("ArrowUp");
+  await expect
+    .poll(() => linesContent.getAttribute("style"))
+    .toContain("top: 0px");
+  const before = await linesContent.getAttribute("style");
+  await page.keyboard.press("PageDown");
+  await expect
+    .poll(() => linesContent.getAttribute("style"))
+    .not.toBe(before);
+});
+
 test("light-dismisses the compact Codicon command palette", async ({
   page,
 }) => {
