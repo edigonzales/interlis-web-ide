@@ -119,6 +119,20 @@ test("remembers diagram visibility only when enabled", async ({ page }) => {
   await expect(diagram).toBeVisible();
 });
 
+test("closes the diagram when closing the active model", async ({ page }) => {
+  await page.goto("./");
+  const diagram = page.getByRole("region", {
+    name: "Live INTERLIS diagram",
+  });
+  await expect(diagram).toBeVisible();
+
+  await page
+    .locator("#tabs")
+    .getByRole("button", { name: "Close Model.ili", exact: true })
+    .click();
+  await expect(diagram).toBeHidden();
+});
+
 test("light-dismisses the compact Codicon command palette", async ({
   page,
 }) => {

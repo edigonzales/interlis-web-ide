@@ -719,6 +719,12 @@ export class WebIdeWorkbench {
     const ordered = [...this.#tabs.values()];
     const index = ordered.indexOf(tab);
     const wasActive = tab.path === this.#activePath;
+    if (
+      wasActive &&
+      tab.label.toLowerCase().endsWith(".ili") &&
+      this.#diagramPreferredVisible
+    )
+      this.#hideDiagram();
     if (tab.recoveryTimer) clearTimeout(tab.recoveryTimer);
     if (tab.autoSaveTimer) clearTimeout(tab.autoSaveTimer);
     if (!tab.readOnly) await this.#recovery.clear(tab.model.uri.toString());
@@ -864,14 +870,18 @@ export class WebIdeWorkbench {
 
   async toggleDiagram(): Promise<void> {
     if (this.#diagramPreferredVisible && this.#diagramVisible) {
-      this.#diagramPreferredVisible = false;
-      this.#diagramVisible = false;
-      this.#layout = { ...this.#layout, diagramVisible: false };
-      this.#persistLayout();
-      this.#syncAuxiliaryLayout();
+      this.#hideDiagram();
       return;
     }
     await this.showDiagram();
+  }
+
+  #hideDiagram(): void {
+    this.#diagramPreferredVisible = false;
+    this.#diagramVisible = false;
+    this.#layout = { ...this.#layout, diagramVisible: false };
+    this.#persistLayout();
+    this.#syncAuxiliaryLayout();
   }
 
   async exportSvg(): Promise<void> {
