@@ -158,6 +158,7 @@ export class WebIdeWorkbench {
   #diagramLayout: LayoutDiagram | null = null;
   #diagramViewport: AnchoredViewport | null = null;
   #diagramSvg = "";
+  #diagramInteractionController: AbortController | null = null;
   #diagramVisible = this.#editorSettings.rememberDiagramVisibility
     ? this.#layout.diagramVisible
     : defaultWorkbenchLayoutSettings.diagramVisible;
@@ -2165,6 +2166,8 @@ export class WebIdeWorkbench {
   async #renderDiagram(): Promise<void> {
     const generation = ++this.#diagramGeneration;
     const host = this.#required("#diagram-host");
+    this.#diagramInteractionController?.abort();
+    this.#diagramInteractionController = null;
     const previous = host.querySelector<HTMLElement>(".diagram-viewport");
     if (previous && this.#diagramLayout) {
       const previousZoom = clampDiagramZoom(
@@ -2193,7 +2196,7 @@ export class WebIdeWorkbench {
       if (generation !== this.#diagramGeneration) return;
       this.#diagramLayout = rendered.layout;
       this.#diagramSvg = rendered.svg;
-      host.innerHTML = `<header class="diagram-toolbar"><span class="diagram-status"></span><button data-command="diagram-refresh"><span class="codicon codicon-refresh" aria-hidden="true"></span>Auto-layout</button><button data-command="export-svg"><span class="codicon codicon-export" aria-hidden="true"></span>SVG</button><button data-command="export-docx"><span class="codicon codicon-file" aria-hidden="true"></span>DOCX</button><button data-command="diagram" aria-label="Close UML diagram" title="Close UML Diagram"><span class="codicon codicon-close" aria-hidden="true"></span></button></header><div class="diagram-viewport"><div class="diagram-canvas">${rendered.svg}</div></div>`;
+      host.innerHTML = `<header class="diagram-toolbar"><span class="diagram-status"></span><button data-command="diagram-refresh"><span class="codicon codicon-refresh" aria-hidden="true"></span>Auto-layout</button><button data-command="export-svg"><span class="codicon codicon-export" aria-hidden="true"></span>SVG</button><button data-command="export-docx"><span class="codicon codicon-file" aria-hidden="true"></span>DOCX</button><button data-command="diagram" aria-label="Close UML diagram" title="Close UML Diagram"><span class="codicon codicon-close" aria-hidden="true"></span></button></header><div class="diagram-viewport" tabindex="0" aria-label="Diagram viewport — hold Space and drag to pan" title="Hold Space and drag to pan"><div class="diagram-canvas">${rendered.svg}</div></div>`;
       const status = host.querySelector<HTMLElement>(".diagram-status");
       if (status) {
         status.textContent = this.#diagram.state.message;
@@ -2294,23 +2297,55 @@ export class WebIdeWorkbench {
         let panStartY = 0;
         let panScrollX = 0;
         let panScrollY = 0;
-        viewport.addEventListener("pointerdown", (event) => {
-          if (event.button !== 1) return;
-          event.preventDefault();
-          panPointer = event.pointerId;
-          panStartX = event.clientX;
-          panStartY = event.clientY;
-          panScrollX = viewport.scrollLeft;
-          panScrollY = viewport.scrollTop;
-          viewport.classList.add("is-panning");
-          viewport.setPointerCapture(event.pointerId);
+        let spacePressed = false;
+        const interactionController = new AbortController();
+        this.#diagramInteractionController = interactionController;
+        const interactionSignal = interactionController.signal;
+        const updateSpace = (event: KeyboardEvent): void => {
+          if (event.code !== "Space") return;
+          const overViewport =
+            viewport.matches(":hover") || document.activeElement === viewport;
+          if (event.type === "keydown" && !overViewport) return;
+          spacePressed = event.type === "keydown";
+          if (overViewport) event.preventDefault();
+        };
+        document.addEventListener("keydown", updateSpace, {
+          signal: interactionSignal,
         });
-        viewport.addEventListener("pointermove", (event) => {
-          if (event.pointerId !== panPointer) return;
-          event.preventDefault();
-          viewport.scrollLeft = panScrollX - (event.clientX - panStartX);
-          viewport.scrollTop = panScrollY - (event.clientY - panStartY);
+        document.addEventListener("keyup", updateSpace, {
+          signal: interactionSignal,
         });
+        viewport.addEventListener(
+          "pointerdown",
+          (event) => {
+            const panningButton =
+              event.button === 1 || (event.button === 0 && spacePressed);
+            if (!panningButton) {
+              viewport.focus({ preventScroll: true });
+              return;
+            }
+            event.preventDefault();
+            viewport.focus({ preventScroll: true });
+            panPointer = event.pointerId;
+            panStartX = event.clientX;
+            panStartY = event.clientY;
+            panScrollX = viewport.scrollLeft;
+            panScrollY = viewport.scrollTop;
+            viewport.classList.add("is-panning");
+            viewport.setPointerCapture(event.pointerId);
+          },
+          { signal: interactionSignal },
+        );
+        viewport.addEventListener(
+          "pointermove",
+          (event) => {
+            if (event.pointerId !== panPointer) return;
+            event.preventDefault();
+            viewport.scrollLeft = panScrollX - (event.clientX - panStartX);
+            viewport.scrollTop = panScrollY - (event.clientY - panStartY);
+          },
+          { signal: interactionSignal },
+        );
         const stopPan = (event: PointerEvent): void => {
           if (event.pointerId !== panPointer) return;
           const pointer = panPointer;
@@ -2322,12 +2357,22 @@ export class WebIdeWorkbench {
           )
             viewport.releasePointerCapture(pointer);
         };
-        viewport.addEventListener("pointerup", stopPan);
-        viewport.addEventListener("pointercancel", stopPan);
-        viewport.addEventListener("lostpointercapture", stopPan);
-        viewport.addEventListener("auxclick", (event) => {
-          if (event.button === 1) event.preventDefault();
+        viewport.addEventListener("pointerup", stopPan, {
+          signal: interactionSignal,
         });
+        viewport.addEventListener("pointercancel", stopPan, {
+          signal: interactionSignal,
+        });
+        viewport.addEventListener("lostpointercapture", stopPan, {
+          signal: interactionSignal,
+        });
+        viewport.addEventListener(
+          "auxclick",
+          (event) => {
+            if (event.button === 1) event.preventDefault();
+          },
+          { signal: interactionSignal },
+        );
 
         syncSurface();
         viewport.scrollTo(

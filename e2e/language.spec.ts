@@ -87,6 +87,115 @@ test("navigates class snippets and suppresses empty suggestions", async ({
   expect(sourceAfterBody).not.toContain("No suggestions");
 });
 
+test("does not suggest types on a new attribute line", async ({ page }) => {
+  await page.goto("./");
+  await expect(page.locator("#compile-status")).toContainText("compiled");
+
+  const editor = page.getByRole("textbox", { name: "Editor content" }).first();
+  await editor.focus();
+  const modifier = await page.evaluate(() =>
+    navigator.userAgent.includes("Macintosh") ? "Meta" : "Control",
+  );
+  await editor.press(modifier + "+A");
+  await page.keyboard.insertText(`INTERLIS 2.4;
+MODEL M =
+  CLASS C =
+    value: TEXT;
+    `);
+
+  const suggestWidget = page.locator(".suggest-widget");
+  await expect(suggestWidget).toBeHidden();
+  await page.keyboard.type("newAttribute");
+  await expect(suggestWidget).toBeHidden();
+});
+
+test("suggests imported model names as type namespaces", async ({ page }) => {
+  test.setTimeout(60_000);
+  const workspaceId = `model-namespace-e2e-${Date.now()}`;
+  await page.goto("./icon.svg");
+  await page.evaluate(
+    async ({ id, rootSource, importedSource }) => {
+      sessionStorage.setItem("interlis-web-ide.active-workspace", id);
+      const root = await navigator.storage.getDirectory();
+      const metadata = await root.getDirectoryHandle(".interlis", {
+        create: true,
+      });
+      const metadataFile = await metadata.getFileHandle("workspaces.json", {
+        create: true,
+      });
+      const metadataWriter = await metadataFile.createWritable();
+      await metadataWriter.write(
+        JSON.stringify({
+          schemaVersion: 1,
+          workspaces: [
+            {
+              id,
+              name: "Model Namespace E2E",
+              kind: "opfs",
+              createdAt: "2026-01-01T00:00:00.000Z",
+            },
+          ],
+        }),
+      );
+      await metadataWriter.close();
+      const workspaces = await root.getDirectoryHandle("workspaces", {
+        create: true,
+      });
+      const workspace = await workspaces.getDirectoryHandle(id, {
+        create: true,
+      });
+      for (const [name, source] of [
+        ["A_Model.ili", rootSource],
+        ["External.ili", importedSource],
+      ] as const) {
+        const model = await workspace.getFileHandle(name, { create: true });
+        const writer = await model.createWritable();
+        await writer.write(source);
+        await writer.close();
+      }
+    },
+    {
+      id: workspaceId,
+      rootSource: `INTERLIS 2.4;
+MODEL Root =
+  IMPORTS External;
+  CLASS Item =
+    value: External.Code;
+  END Item;
+END Root.
+`,
+      importedSource: `INTERLIS 2.4;
+MODEL External =
+  DOMAIN Code = TEXT;
+END External.
+`,
+    },
+  );
+  await page.goto("./");
+  await expect(page.locator("#compile-status")).toContainText("compiled");
+  await page.getByRole("button", { name: "Compile", exact: true }).click();
+  await expect(page.locator("#output")).toContainText("ilic completed");
+
+  const editor = page.getByRole("textbox", { name: "Editor content" }).first();
+  await editor.focus();
+  const modifier = await page.evaluate(() =>
+    navigator.userAgent.includes("Macintosh") ? "Meta" : "Control",
+  );
+  await editor.press(modifier + "+Home");
+  for (let index = 0; index < 4; index++)
+    await page.keyboard.press("ArrowDown");
+  await page.keyboard.press("End");
+  for (let index = 0; index < "External.Code;".length; index++)
+    await page.keyboard.press("Backspace");
+  await page.keyboard.type("Ex");
+
+  await expect(
+    page
+      .locator(".suggest-widget .monaco-list-row")
+      .filter({ hasText: "External" }),
+  ).toBeVisible();
+});
+
 test("keeps unused-import warnings in dirty and saved states", async ({
   page,
   browserName,

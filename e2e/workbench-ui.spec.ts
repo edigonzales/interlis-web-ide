@@ -450,6 +450,26 @@ test("zooms and pans the UML diagram with mouse controls", async ({ page }) => {
     .toBeCloseTo(base.width * 0.25, 1);
 
   for (let index = 0; index < 20; index += 1) await page.mouse.wheel(0, -120);
+  const beforeSpacePan = await viewport.evaluate((element) => ({
+    scrollLeft: element.scrollLeft,
+    scrollTop: element.scrollTop,
+  }));
+  await viewport.focus();
+  await page.keyboard.down("Space");
+  await page.mouse.move(cursor.x, cursor.y);
+  await page.mouse.down({ button: "left" });
+  await expect(viewport).toHaveClass(/is-panning/u);
+  await page.mouse.move(cursor.x - 100, cursor.y - 80);
+  await page.mouse.up({ button: "left" });
+  await page.keyboard.up("Space");
+  await expect(viewport).not.toHaveClass(/is-panning/u);
+  const afterSpacePan = await viewport.evaluate((element) => ({
+    scrollLeft: element.scrollLeft,
+    scrollTop: element.scrollTop,
+  }));
+  expect(afterSpacePan.scrollLeft).toBeGreaterThan(beforeSpacePan.scrollLeft);
+  expect(afterSpacePan.scrollTop).toBeGreaterThan(beforeSpacePan.scrollTop);
+
   const beforePan = await viewport.evaluate((element) => ({
     scrollLeft: element.scrollLeft,
     scrollTop: element.scrollTop,
@@ -457,15 +477,15 @@ test("zooms and pans the UML diagram with mouse controls", async ({ page }) => {
   await page.mouse.move(cursor.x, cursor.y);
   await page.mouse.down({ button: "middle" });
   await expect(viewport).toHaveClass(/is-panning/u);
-  await page.mouse.move(cursor.x - 100, cursor.y - 80);
+  await page.mouse.move(cursor.x + 100, cursor.y + 80);
   await page.mouse.up({ button: "middle" });
   await expect(viewport).not.toHaveClass(/is-panning/u);
   const afterPan = await viewport.evaluate((element) => ({
     scrollLeft: element.scrollLeft,
     scrollTop: element.scrollTop,
   }));
-  expect(afterPan.scrollLeft).toBeGreaterThan(beforePan.scrollLeft);
-  expect(afterPan.scrollTop).toBeGreaterThan(beforePan.scrollTop);
+  expect(afterPan.scrollLeft).toBeLessThan(beforePan.scrollLeft);
+  expect(afterPan.scrollTop).toBeLessThan(beforePan.scrollTop);
 
   const beforeRefresh = await viewport.evaluate((element) => ({
     zoom: Number(element.dataset.zoom),
