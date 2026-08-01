@@ -44,6 +44,7 @@ import {
   importWorkspaceZip,
   normalizePath,
   textFile,
+  WorkspaceSourceSynchronizer,
 } from "../workspace/index.js";
 import type {
   WorkspaceDescriptor,
@@ -128,6 +129,7 @@ export class WebIdeWorkbench {
   readonly #commands: Command[];
   readonly #workspaceListeners = new Set<() => void>();
   readonly #diagram = new DiagramController();
+  readonly #workspaceSourceSynchronizer: WorkspaceSourceSynchronizer;
   readonly #outlineCollapsed = new Set<string>();
   readonly #suggestionRefresh = new DebouncedTask(suggestionDelay);
   readonly #outlineRefresh = new DebouncedTask(outlineDelay);
@@ -173,6 +175,9 @@ export class WebIdeWorkbench {
   ) {
     this.#workspace = manager.activeFileSystem;
     this.#recovery = new BufferRecoveryStore(this.#workspace);
+    this.#workspaceSourceSynchronizer = new WorkspaceSourceSynchronizer(
+      languageService,
+    );
     this.#commands = [
       {
         id: "new-file",
@@ -2123,7 +2128,7 @@ export class WebIdeWorkbench {
   async #syncWorkspaceSources(path = "/"): Promise<void> {
     const sources: Array<{ uri: string; text: string }> = [];
     await this.#collectWorkspaceSources(path, sources);
-    this.languageService.replaceWorkspaceSources(sources);
+    this.#workspaceSourceSynchronizer.sync(sources);
   }
 
   async #collectWorkspaceSources(
@@ -2148,7 +2153,7 @@ export class WebIdeWorkbench {
   #resetLanguageDocuments(): void {
     for (const document of [...this.languageService.documents])
       this.languageService.closeDocument(document.uri);
-    this.languageService.replaceWorkspaceSources([]);
+    this.#workspaceSourceSynchronizer.clear();
   }
 
   async #renderDiagram(): Promise<void> {

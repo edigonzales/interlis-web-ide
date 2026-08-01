@@ -18,6 +18,11 @@ export type {
   FileType,
   WorkspaceFileSystem,
 } from "./types.js";
+export {
+  WorkspaceSourceSynchronizer,
+  type WorkspaceSourceSink,
+  type WorkspaceSourceUpdate,
+} from "./source-synchronizer.js";
 export { baseName, normalizePath, parentPath, pathSegments } from "./types.js";
 export {
   downloadBytes,
