@@ -364,8 +364,14 @@ export class WebIdeWorkbench {
     if (event.trigger === "manual") this.#selectPanelView("output");
     const snapshot = event.semantic.value;
     if (!event.compilation.success || !snapshot?.success) {
-      if (this.#diagramVisible)
-        this.#renderDiagramStatus("Diagram unavailable — compilation failed.");
+      const state = this.#diagram.stale(
+        "Showing the last valid diagram; compilation failed.",
+      );
+      if (this.#diagramVisible) {
+        if (!state.snapshot) this.#renderDiagramStatus(state.message);
+        else if (!this.#updateDiagramStatus(state.message, state.status))
+          await this.#renderDiagram();
+      }
       return;
     }
     this.#diagram.publish(
@@ -2350,8 +2356,23 @@ export class WebIdeWorkbench {
     host.innerHTML = `<header class="diagram-toolbar"><span class="diagram-status"></span><button data-command="diagram-refresh"><span class="codicon codicon-refresh" aria-hidden="true"></span>Retry</button><button data-command="diagram" aria-label="Close UML diagram" title="Close UML Diagram"><span class="codicon codicon-close" aria-hidden="true"></span></button></header><div class="diagram-empty"></div>`;
     const status = host.querySelector<HTMLElement>(".diagram-status");
     const empty = host.querySelector<HTMLElement>(".diagram-empty");
-    if (status) status.textContent = message;
+    if (status) {
+      status.textContent = message;
+      status.dataset.state = this.#diagram.state.status;
+    }
     if (empty) empty.textContent = message;
+  }
+
+  #updateDiagramStatus(
+    message: string,
+    state: "empty" | "loading" | "ready" | "stale" | "error",
+  ): boolean {
+    const host = this.#required("#diagram-host");
+    const status = host.querySelector<HTMLElement>(".diagram-status");
+    if (!status || !host.querySelector(".diagram-viewport svg")) return false;
+    status.textContent = message;
+    status.dataset.state = state;
+    return true;
   }
 
   async #navigateToDiagramNode(nodeId: string): Promise<void> {

@@ -249,6 +249,9 @@ END Valid.
     },
   );
   await page.goto("./");
+  const validDiagramSvg = await page
+    .locator("#diagram-host svg")
+    .evaluate((svg) => svg.outerHTML);
   const editorInput = page
     .getByRole("textbox", { name: "Editor content" })
     .first();
@@ -262,10 +265,13 @@ END Valid.
   await expect(problem).toBeVisible();
   await expect(page.locator("#problem-count")).toBeVisible();
   await expect(page.locator("#problem-count")).not.toHaveText("0");
-  await expect(page.locator("#diagram-host svg")).toHaveCount(0);
+  await expect(page.locator("#diagram-host svg")).toBeVisible();
   await expect(
     page.getByRole("region", { name: "Live INTERLIS diagram" }),
-  ).toContainText("Diagram unavailable");
+  ).toContainText("Showing the last valid diagram");
+  expect(
+    await page.locator("#diagram-host svg").evaluate((svg) => svg.outerHTML),
+  ).toBe(validDiagramSvg);
   await problem.click();
   await expect(page.locator("#cursor-status")).not.toHaveText("Ln 1, Col 1");
   await page.getByRole("button", { name: "OUTPUT", exact: true }).click();
