@@ -68,6 +68,10 @@ import {
   writeEditorSettings,
   type EditorSettings,
 } from "../settings.js";
+import { ProblemStore } from "../problems/problem-store.js";
+import { projectProblems } from "../problems/problem-projector.js";
+import { problemSelection } from "../problems/problem-navigation.js";
+import type { ProblemItem } from "../problems/problem-model.js";
 
 interface OpenTab {
   readonly path: string;
@@ -132,6 +136,7 @@ export class WebIdeWorkbench {
   readonly #workspaceListeners = new Set<() => void>();
   readonly #diagram = new DiagramController();
   readonly #workspaceSourceSynchronizer: WorkspaceSourceSynchronizer;
+  readonly #problemStore = new ProblemStore();
   readonly #outlineCollapsed = new Set<string>();
   readonly #suggestionRefresh = new DebouncedTask(suggestionDelay);
   readonly #suggestionRequests = new SuggestionRequestGate();
@@ -437,6 +442,8 @@ export class WebIdeWorkbench {
   #renderProblems(event: CompilationEvent): void {
     const host = this.#required("#problems");
     const { diagnostics, errorCount, warningCount } = event.compilation;
+    const problems = projectProblems(diagnostics, event.rootUri);
+    this.#problemStore.replace(event.rootUri, problems);
     const problemCount = this.#required("#problem-count");
     problemCount.textContent = errorCount > 0 ? String(errorCount) : "";
     problemCount.classList.toggle("hidden", errorCount === 0);
@@ -447,12 +454,10 @@ export class WebIdeWorkbench {
     const summary = document.createElement("p");
     summary.className = "problems-summary";
     summary.textContent = `${errorCount} errors, ${warningCount} warnings`;
-    const rows = diagnostics.map((diagnostic) => {
+    const rows = problems.map((problem) => {
       const row = document.createElement("button");
-      const severity = diagnostic.treatedAsError
-        ? "error"
-        : diagnostic.severity;
-      const range = diagnostic.range;
+      const severity = problem.severity;
+      const range = problem.range;
       row.className = `problem-row ${severity}`;
       row.dataset.severity = severity;
       row.innerHTML = "";
@@ -461,28 +466,47 @@ export class WebIdeWorkbench {
         : this.#labelForUri(event.rootUri);
       const heading = document.createElement("span");
       heading.className = "problem-heading";
-      heading.textContent = `${severity.toUpperCase()} ${location} [${diagnostic.code || "none"}]`;
+      heading.textContent = `${severity.toUpperCase()} ${location} [${problem.code || "none"}]`;
       const message = document.createElement("span");
       message.className = "problem-message";
-      message.textContent = diagnostic.message;
+      message.textContent = problem.message;
       row.append(heading, message);
-      if (
-        diagnostic.notes.length > 0 ||
-        diagnostic.relatedInformation.length > 0
-      ) {
+      if (problem.notes.length > 0 || problem.relatedInformation.length > 0) {
         const details = document.createElement("span");
         details.className = "problem-details";
-        details.textContent = [
-          ...diagnostic.notes.map((note) => `Note: ${note}`),
-          ...diagnostic.relatedInformation.map(
-            (related) => `Related: ${related.message}`,
-          ),
-        ].join(" · ");
+        for (const note of problem.notes) {
+          const item = document.createElement("span");
+          item.textContent = `Note: ${note}`;
+          details.append(item);
+        }
+        for (const related of problem.relatedInformation) {
+          const item = document.createElement("button");
+          item.type = "button";
+          item.textContent = `Related: ${related.message}`;
+          item.addEventListener("click", (click) => {
+            click.stopPropagation();
+            void this.#navigateToProblem(
+              {
+                id: "related-navigation",
+                uri: related.uri,
+                severity: "information",
+                code: problem.code,
+                source: problem.source,
+                message: related.message,
+                range: related.range,
+                relatedInformation: [],
+                notes: [],
+              },
+              event.rootUri,
+            );
+          });
+          details.append(item);
+        }
         row.append(details);
       }
       row.addEventListener(
         "click",
-        () => void this.#navigateToDiagnostic(diagnostic, event.rootUri),
+        () => void this.#navigateToProblem(problem, event.rootUri),
       );
       return row;
     });
@@ -492,6 +516,25 @@ export class WebIdeWorkbench {
       empty.textContent = "No diagnostics.";
       host.replaceChildren(summary, empty);
     } else host.replaceChildren(summary, ...rows);
+  }
+
+  async #navigateToProblem(
+    problem: ProblemItem,
+    rootUri: string,
+  ): Promise<void> {
+    await this.#navigateToDiagnostic(
+      {
+        severity: problem.severity,
+        code: problem.code,
+        message: problem.message,
+        range: problem.range,
+        relatedInformation: [...problem.relatedInformation],
+        notes: [...problem.notes],
+        treatedAsError: problem.severity === "error",
+        source: problem.source,
+      },
+      rootUri,
+    );
   }
 
   async #navigateToDiagnostic(
@@ -517,12 +560,28 @@ export class WebIdeWorkbench {
     }
     const range = diagnostic.range;
     if (!range) return;
-    const selection = {
-      startLineNumber: range.start.line + 1,
-      startColumn: range.start.character + 1,
-      endLineNumber: range.end.line + 1,
-      endColumn: range.end.character + 1,
-    };
+    const selection = problemSelection({
+      id: "navigation",
+      uri,
+      severity: diagnostic.severity,
+      code: diagnostic.code,
+      source: diagnostic.source,
+      message: diagnostic.message,
+      range,
+      relatedInformation: diagnostic.relatedInformation.flatMap((value) =>
+        value.range
+          ? [
+              {
+                uri: value.range.uri,
+                message: value.message,
+                range: value.range,
+              },
+            ]
+          : [],
+      ),
+      notes: diagnostic.notes,
+    });
+    if (!selection) return;
     this.#primary.setSelection(selection);
     this.#primary.revealRangeInCenter(selection);
     this.#primary.focus();
@@ -1060,11 +1119,10 @@ export class WebIdeWorkbench {
     try {
       const path = await this.#uniqueDroppedFilePath(file.name);
       const bytes = new Uint8Array(await file.arrayBuffer());
-      await this.#workspace.write(
-        path,
-        bytes,
-        { create: true, overwrite: false },
-      );
+      await this.#workspace.write(path, bytes, {
+        create: true,
+        overwrite: false,
+      });
       this.#workspaceSourceSynchronizer.put({
         uri: this.#modelUri(path),
         text: fileText(bytes),
@@ -1092,6 +1150,8 @@ export class WebIdeWorkbench {
   }
 
   async #switchFileSystem(workspace: WorkspaceFileSystem): Promise<void> {
+    this.#problemStore.clear();
+    this.#required("#problems").replaceChildren();
     this.#disposeTabs();
     this.#resetLanguageDocuments();
     this.#workspace = workspace;

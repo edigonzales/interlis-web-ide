@@ -864,38 +864,38 @@ packages:
     engines: {node: '>=18.18'}
 
   '@ilic/compiler-wasm@file:../interlis-language-tools/artifacts/npm/ilic-compiler-wasm-snapshot.tgz':
-    resolution: {integrity: sha512-LZZxhH6El40tYsrxKYOwy4LWnRr5cX/olYrheXrwSYcNOzuXQo8/bAFH/VxIv8jnFq3wQytjkZhqamchGrcJZA==, tarball: file:../interlis-language-tools/artifacts/npm/ilic-compiler-wasm-snapshot.tgz}
-    version: 0.9.9-SNAPSHOT.20260801124614
+    resolution: {integrity: sha512-K1/2GuNGcyJG3CYiQ0OqR1aacXBxE9tIC5GDIGVgUhnJ96np5TRkjmeVX/Ro5b2bAvyS2s2wI9TYICnfjE7M/g==, tarball: file:../interlis-language-tools/artifacts/npm/ilic-compiler-wasm-snapshot.tgz}
+    version: 0.9.9-SNAPSHOT.20260802213259
     engines: {node: '>=18'}
 
   '@ilic/diagram@file:../interlis-language-tools/artifacts/npm/ilic-diagram-snapshot.tgz':
-    resolution: {integrity: sha512-frRBuEbQQ+NXDNnA9CPzbE4fmsbssP+DZ4DhR88oCreICd3GVULCuU23JKQo3z0u6CR8yckqGCZDsDOWitL8mQ==, tarball: file:../interlis-language-tools/artifacts/npm/ilic-diagram-snapshot.tgz}
-    version: 0.1.0-SNAPSHOT.20260801124614
+    resolution: {integrity: sha512-IxCdidjv+/0S0fL+GERLJ2n4VfeIKOAORQMShdWL6hr9JcjnUAm+cotl+0zucS96hNaofWubHTGAjdLMjIKkUQ==, tarball: file:../interlis-language-tools/artifacts/npm/ilic-diagram-snapshot.tgz}
+    version: 0.1.0-SNAPSHOT.20260802213259
     engines: {node: '>=18'}
 
   '@ilic/docx@file:../interlis-language-tools/artifacts/npm/ilic-docx-snapshot.tgz':
-    resolution: {integrity: sha512-lbgJ4Y5OnhcbtZAjoF+gSAPoi+3fbLi4mUeGUCpebLiR4rkZ+PsiCZTQmazrortPsEjJyuLaJ/q3vyW8oAIKSw==, tarball: file:../interlis-language-tools/artifacts/npm/ilic-docx-snapshot.tgz}
-    version: 0.1.0-SNAPSHOT.20260801124614
+    resolution: {integrity: sha512-ya7OUGDxnE29NZGtx/82d5UZgjrNh7M2nr3cz3y2K8QWsTTGnQouLoIZXapv8OIojNhJFg3H+/GP//rT5sN5jw==, tarball: file:../interlis-language-tools/artifacts/npm/ilic-docx-snapshot.tgz}
+    version: 0.1.0-SNAPSHOT.20260802213259
     engines: {node: '>=18'}
 
   '@ilic/language-service@file:../interlis-language-tools/artifacts/npm/ilic-language-service-snapshot.tgz':
-    resolution: {integrity: sha512-R1+5JO/s1QEPaksylq+GsOjr+HWEkR7W47GfKyEi5/7H9pgylUXM8UdvovaYtWQxb5bKu32AWVdb8Qe0W5Gktw==, tarball: file:../interlis-language-tools/artifacts/npm/ilic-language-service-snapshot.tgz}
-    version: 0.1.0-SNAPSHOT.20260801124614
+    resolution: {integrity: sha512-n6Aiqto+Nbe44WwxRp78ShCNtozgff94AX7iiUeFdzUQWTNCxeL0Ou+3v8LG+HlXsj16LsDCRensdsZhAtARDw==, tarball: file:../interlis-language-tools/artifacts/npm/ilic-language-service-snapshot.tgz}
+    version: 0.1.0-SNAPSHOT.20260802213259
     engines: {node: '>=18'}
 
   '@ilic/monaco-adapter@file:../interlis-language-tools/artifacts/npm/ilic-monaco-adapter-snapshot.tgz':
-    resolution: {integrity: sha512-sgf1SRndxnDPGN/imT41DIuuZCF4eNY9wcs1gVHdgFNGSkTsxDhDTyxUoBddHOMBTjjcKq35qK8531eB2a03mA==, tarball: file:../interlis-language-tools/artifacts/npm/ilic-monaco-adapter-snapshot.tgz}
-    version: 0.1.0-SNAPSHOT.20260801124614
+    resolution: {integrity: sha512-0xkr34GXjvEoVp+mTtLFduTdYSaBCeU8KtIJ5/ve5FQbtnu9Si/IbeH1RIWwMFHzEQmgJGuxc0txUaRxQ9VyvQ==, tarball: file:../interlis-language-tools/artifacts/npm/ilic-monaco-adapter-snapshot.tgz}
+    version: 0.1.0-SNAPSHOT.20260802213259
     engines: {node: '>=18'}
 
   '@ilic/repository-core@file:../interlis-language-tools/artifacts/npm/ilic-repository-core-snapshot.tgz':
-    resolution: {integrity: sha512-1MEOW1hd7FFsBgriwg+0L8AWCe7f8eVX1SVpccEtyaodeZu5saOxqy8l8O4MmYSxsbTHBPibQdJLUWSombFcQQ==, tarball: file:../interlis-language-tools/artifacts/npm/ilic-repository-core-snapshot.tgz}
-    version: 0.9.9-SNAPSHOT.20260801124614
+    resolution: {integrity: sha512-dsCsQjen3otnVckLHTf4lQmoTUGomznJefY6mH3U+COsaPdTw7/lMh+HLk7lmZoYRNymgq1EQMqXwqf985tOmQ==, tarball: file:../interlis-language-tools/artifacts/npm/ilic-repository-core-snapshot.tgz}
+    version: 0.9.9-SNAPSHOT.20260802213259
     engines: {node: '>=18'}
 
   '@ilic/tools@file:../interlis-language-tools/artifacts/npm/ilic-tools-snapshot.tgz':
-    resolution: {integrity: sha512-69RWXhAzLe1H9Cvlj07psl0dGwtxf8joY33NGJtOYfI0L8hDOoIyeZvo1AFFOTopP4Oga2xmXuU8XnUgzTVU7g==, tarball: file:../interlis-language-tools/artifacts/npm/ilic-tools-snapshot.tgz}
-    version: 0.9.9-SNAPSHOT.20260801124614
+    resolution: {integrity: sha512-TUpg07XvXSp3Y8QXN8fZjZq1S8H5xW6erx5TQ001imbw9qGm7DcEe3n1UdlA9cR9BIdgfTg+UEk6d78sKcyiNQ==, tarball: file:../interlis-language-tools/artifacts/npm/ilic-tools-snapshot.tgz}
+    version: 0.9.9-SNAPSHOT.20260802213259
     engines: {node: '>=18'}
 
   '@inversifyjs/common@1.4.0':
