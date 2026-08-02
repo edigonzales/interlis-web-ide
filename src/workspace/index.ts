@@ -22,6 +22,7 @@ export {
   WorkspaceSourceSynchronizer,
   type WorkspaceSourceSink,
   type WorkspaceSourceUpdate,
+  type WorkspaceFullSyncReason,
 } from "./source-synchronizer.js";
 export { baseName, normalizePath, parentPath, pathSegments } from "./types.js";
 export {

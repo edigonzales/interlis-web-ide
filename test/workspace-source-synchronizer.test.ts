@@ -44,4 +44,37 @@ describe("WorkspaceSourceSynchronizer", () => {
       ["memory:///A.ili", "A", 8],
     ]);
   });
+
+  it("supports direct file events and exposes deterministic lifecycle metrics", () => {
+    const calls: string[] = [];
+    const synchronizer = new WorkspaceSourceSynchronizer({
+      putWorkspaceSource: (uri, text, version) =>
+        calls.push(`put:${uri}:${text}:${version}`),
+      removeWorkspaceSource: (uri) => calls.push(`remove:${uri}`),
+    });
+
+    synchronizer.put({ uri: "memory:///A.ili", text: "A", version: 4 });
+    synchronizer.put({ uri: "memory:///A.ili", text: "A", version: 4 });
+    synchronizer.rename("memory:///A.ili", {
+      uri: "memory:///B.ili",
+      text: "B",
+      version: 5,
+    });
+    synchronizer.remove("memory:///B.ili");
+
+    expect(calls).toEqual([
+      "put:memory:///A.ili:A:4",
+      "remove:memory:///A.ili",
+      "put:memory:///B.ili:B:5",
+      "remove:memory:///B.ili",
+    ]);
+    expect(synchronizer.snapshot()).toEqual([]);
+    expect(synchronizer.metrics()).toMatchObject({
+      directPuts: 2,
+      directRemoves: 2,
+      directRenames: 1,
+      noOps: 1,
+      fullScans: 0,
+    });
+  });
 });

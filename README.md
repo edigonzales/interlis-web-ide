@@ -47,6 +47,13 @@ Compiler, Workbench, Recovery und Git sehen dasselbe binäre
 `WorkspaceFileSystem`. Die IDE kennt den konkreten Speicheradapter nicht. Siehe
 [Browser- und Speicherunterstützung](docs/browser-support.md).
 
+Workspace-Quellen werden über `WorkspaceSourceSynchronizer` ereignisbasiert an
+den Language Service geliefert: Save, Delete, Rename und Dateiimport verwenden
+direkte `put`/`remove`/`rename`-Operationen. `replaceAll` bleibt auf Startup,
+Workspace-Wechsel, ZIP-Import, Reconnect oder ausdrücklichen manuellen Refresh
+beschränkt und erfasst Full-Scan-Zähler. Ein manueller Compile führt bei einem
+aktuellen Synchronizer keinen zusätzlichen Workspace-Scan aus.
+
 ## Entwicklung
 
 Die drei Repositories müssen als Geschwister ausgecheckt sein:

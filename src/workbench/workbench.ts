@@ -48,6 +48,7 @@ import {
 } from "../workspace/index.js";
 import type {
   WorkspaceDescriptor,
+  WorkspaceFullSyncReason,
   WorkspaceFileSystem,
 } from "../workspace/index.js";
 import { workbenchTemplate } from "./template.js";
@@ -337,7 +338,7 @@ export class WebIdeWorkbench {
     await this.#ensureInitialContent();
     await this.#restoreRecovery();
     if (!this.#activePath) await this.#openFirstInterlisFile();
-    await this.#syncWorkspaceSources();
+    await this.#syncWorkspaceSources("startup");
     await this.renderSidebar();
     this.#updateWorkspaceStatus();
     this.#log("OPFS workspace and recovery services are ready.");
@@ -606,9 +607,15 @@ export class WebIdeWorkbench {
   }
 
   async #saveTab(tab: OpenTab, compile: boolean): Promise<void> {
-    await this.#workspace.write(tab.path, textFile(tab.model.getValue()), {
+    const text = tab.model.getValue();
+    await this.#workspace.write(tab.path, textFile(text), {
       create: true,
       overwrite: true,
+    });
+    this.#workspaceSourceSynchronizer.put({
+      uri: tab.model.uri.toString(),
+      text,
+      version: tab.model.getVersionId(),
     });
     if (tab.recoveryTimer) {
       clearTimeout(tab.recoveryTimer);
@@ -674,8 +681,8 @@ export class WebIdeWorkbench {
       this.logError(`Delete ${normalized}`, error);
       return;
     }
+    this.#workspaceSourceSynchronizer.remove(this.#modelUri(normalized));
     if (tab && this.#tabs.has(normalized)) await this.#closeTab(tab);
-    await this.#syncWorkspaceSources();
     await this.renderSidebar();
     const active = this.#activePath
       ? this.#tabs.get(this.#activePath)
@@ -798,6 +805,10 @@ export class WebIdeWorkbench {
     let path = `/Untitled-${index}.ili`;
     while (await this.#exists(path)) path = `/Untitled-${++index}.ili`;
     await this.#workspace.write(path, textFile(""));
+    this.#workspaceSourceSynchronizer.put({
+      uri: this.#modelUri(path),
+      text: "",
+    });
     await this.openFile(path);
     this.#tabs.get(path)?.model.setValue(content);
     await this.renderSidebar();
@@ -853,7 +864,6 @@ export class WebIdeWorkbench {
   async compileWorkspace(): Promise<void> {
     const active = this.#activePath ? this.#tabs.get(this.#activePath) : null;
     if (!active) return;
-    await this.#syncWorkspaceSources();
     await this.languageService.compileDocument(
       active.model.uri.toString(),
       "manual",
@@ -1036,12 +1046,16 @@ export class WebIdeWorkbench {
 
     try {
       const path = await this.#uniqueDroppedFilePath(file.name);
+      const bytes = new Uint8Array(await file.arrayBuffer());
       await this.#workspace.write(
         path,
-        new Uint8Array(await file.arrayBuffer()),
+        bytes,
         { create: true, overwrite: false },
       );
-      await this.#syncWorkspaceSources();
+      this.#workspaceSourceSynchronizer.put({
+        uri: this.#modelUri(path),
+        text: fileText(bytes),
+      });
       await this.openFile(path);
       await this.renderSidebar();
       this.#log(`Imported ${path}`);
@@ -1070,7 +1084,7 @@ export class WebIdeWorkbench {
     this.#workspace = workspace;
     this.#recovery = new BufferRecoveryStore(workspace);
     await this.#ensureInitialContent();
-    await this.#syncWorkspaceSources();
+    await this.#syncWorkspaceSources("workspace-switch");
     await this.#openFirstInterlisFile();
     await this.renderSidebar();
     this.#updateWorkspaceStatus();
@@ -1156,7 +1170,7 @@ export class WebIdeWorkbench {
             this.#workspace,
             new Uint8Array(buffer),
           );
-          await this.#syncWorkspaceSources();
+          await this.#syncWorkspaceSources("zip-import");
           this.#log(`Imported ${imported.length} file(s) from ZIP.`);
           await this.renderSidebar();
         });
@@ -2132,10 +2146,13 @@ export class WebIdeWorkbench {
     }
   }
 
-  async #syncWorkspaceSources(path = "/"): Promise<void> {
+  async #syncWorkspaceSources(
+    reason: WorkspaceFullSyncReason = "manual-refresh",
+    path = "/",
+  ): Promise<void> {
     const sources: Array<{ uri: string; text: string }> = [];
     await this.#collectWorkspaceSources(path, sources);
-    this.#workspaceSourceSynchronizer.sync(sources);
+    this.#workspaceSourceSynchronizer.replaceAll(sources, reason);
   }
 
   async #collectWorkspaceSources(

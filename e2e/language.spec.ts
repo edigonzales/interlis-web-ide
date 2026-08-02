@@ -157,15 +157,15 @@ test("suggests imported model names as type namespaces", async ({ page }) => {
     {
       id: workspaceId,
       rootSource: `INTERLIS 2.4;
-MODEL Root =
+MODEL Root AT "https://example.invalid" VERSION "1" =
   IMPORTS External;
-  CLASS Item =
+  CLASS Item (ABSTRACT) =
     value: External.Code;
   END Item;
 END Root.
 `,
       importedSource: `INTERLIS 2.4;
-MODEL External =
+MODEL External AT "https://example.invalid" VERSION "1" =
   DOMAIN Code = TEXT;
 END External.
 `,
@@ -174,7 +174,9 @@ END External.
   await page.goto("./");
   await expect(page.locator("#compile-status")).toContainText("compiled");
   await page.getByRole("button", { name: "Compile", exact: true }).click();
-  await expect(page.locator("#output")).toContainText("ilic completed");
+  await expect(page.locator("#output")).toContainText(
+    /ilic completed with no errors, no warnings/u,
+  );
 
   const editor = page.getByRole("textbox", { name: "Editor content" }).first();
   await editor.focus();
