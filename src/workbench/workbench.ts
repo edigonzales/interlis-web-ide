@@ -58,6 +58,7 @@ import {
   defaultWorkbenchLayoutSettings,
   outlineCodiconName,
   parseWorkbenchLayoutSettings,
+  SuggestionRequestGate,
   updateDirtyState,
   type WorkbenchLayoutSettings,
 } from "./ui-state.js";
@@ -133,6 +134,7 @@ export class WebIdeWorkbench {
   readonly #workspaceSourceSynchronizer: WorkspaceSourceSynchronizer;
   readonly #outlineCollapsed = new Set<string>();
   readonly #suggestionRefresh = new DebouncedTask(suggestionDelay);
+  readonly #suggestionRequests = new SuggestionRequestGate();
   readonly #outlineRefresh = new DebouncedTask(outlineDelay);
   readonly #outlineEntries = new Map<
     string,
@@ -302,8 +304,19 @@ export class WebIdeWorkbench {
       this.#required("#cursor-status").textContent =
         `Ln ${event.position.lineNumber}, Col ${event.position.column}`;
       this.#updateOutlineSelection(event.position);
+      this.#invalidateSuggestions();
+      if (this.#activePath && this.#primary.getModel())
+        this.#scheduleSuggestionRefresh();
+    });
+    this.#primary.onKeyDown((event) => {
+      if (
+        event.keyCode === monaco.KeyCode.Escape ||
+        event.keyCode === monaco.KeyCode.Tab
+      )
+        this.#invalidateSuggestions();
     });
     this.#primary.onDidChangeModel(() => {
+      this.#invalidateSuggestions();
       const model = this.#primary.getModel();
       const tab = model
         ? [...this.#tabs.values()].find(
@@ -2040,11 +2053,13 @@ export class WebIdeWorkbench {
     const becameDirty = updateDirtyState(tab, true);
     this.#required("#result-status").textContent = "outdated — save or compile";
     this.#required("#compile-status").textContent = "INTERLIS: outdated";
-    const saved = this.languageService.getSavedSemanticSnapshot(
-      tab.model.uri.toString(),
-    );
-    if (saved?.value) this.#diagram.publish(saved.value, "stale");
-    if (becameDirty) this.#renderTabs();
+    if (becameDirty) {
+      const saved = this.languageService.getSavedSemanticSnapshot(
+        tab.model.uri.toString(),
+      );
+      if (saved?.value) this.#diagram.publish(saved.value, "stale");
+      this.#renderTabs();
+    }
     if (tab.recoveryTimer) clearTimeout(tab.recoveryTimer);
     tab.recoveryTimer = setTimeout(() => {
       tab.recoveryTimer = null;
@@ -2055,24 +2070,35 @@ export class WebIdeWorkbench {
       );
     }, 250);
     this.#scheduleAutoSave(tab);
-    if (tab.path === this.#activePath)
-      this.#suggestionRefresh.schedule(
-        () => void this.#refreshSuggestions(this.#primary),
-      );
+    if (tab.path === this.#activePath) this.#scheduleSuggestionRefresh();
     if (tab.path === this.#activePath && this.#activeView === "outline")
       this.#outlineRefresh.schedule(() => void this.#renderOutline());
+  }
+
+  #scheduleSuggestionRefresh(target: editor.ICodeEditor = this.#primary): void {
+    const generation = this.#suggestionRequests.next();
+    this.#suggestionRefresh.schedule(() => {
+      void this.#refreshSuggestions(target, generation);
+    });
+  }
+
+  #invalidateSuggestions(target: editor.ICodeEditor = this.#primary): void {
+    this.#suggestionRequests.invalidate();
+    this.#suggestionRefresh.cancel();
+    target.trigger("interlis.suggestionLifecycle", "hideSuggestWidget", null);
   }
 
   #registerSnippetNavigation(): void {
     const snippetContext =
       "editorTextFocus && editorLangId == 'interlis' && inSnippetMode";
     const navigate = () => {
+      this.#invalidateSuggestions();
       this.#primary.trigger(
         "interlis.snippetNavigation",
         "jumpToNextSnippetPlaceholder",
         null,
       );
-      window.setTimeout(() => void this.#refreshSuggestions(this.#primary), 0);
+      this.#scheduleSuggestionRefresh();
     };
     this.#primary.addCommand(
       monaco.KeyCode.Enter,
@@ -2086,7 +2112,10 @@ export class WebIdeWorkbench {
     );
   }
 
-  async #refreshSuggestions(target: editor.ICodeEditor): Promise<void> {
+  async #refreshSuggestions(
+    target: editor.ICodeEditor,
+    generation: number,
+  ): Promise<void> {
     const model = target.getModel();
     const position = target.getPosition();
     if (!model || !position) return;
@@ -2100,6 +2129,7 @@ export class WebIdeWorkbench {
     const isCurrent = (): boolean => {
       const currentPosition = target.getPosition();
       return (
+        this.#suggestionRequests.isCurrent(generation) &&
         target.getModel() === model &&
         model.getVersionId() === version &&
         currentPosition?.lineNumber === position.lineNumber &&
@@ -2124,7 +2154,7 @@ export class WebIdeWorkbench {
       return;
     }
     if (!activation.open) {
-      if (activation.reason === "container-body") hide();
+      hide();
       return;
     }
 
@@ -2874,6 +2904,7 @@ export class WebIdeWorkbench {
 
   #cancelDeferredEditorRefreshes(): void {
     this.#suggestionRefresh.cancel();
+    this.#suggestionRequests.invalidate();
     this.#outlineRefresh.cancel();
   }
 

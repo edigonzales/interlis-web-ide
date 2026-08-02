@@ -33,6 +33,24 @@ export class DebouncedTask {
   }
 }
 
+export class SuggestionRequestGate {
+  #generation = 0;
+
+  next(): number {
+    this.#generation += 1;
+    return this.#generation;
+  }
+
+  invalidate(): number {
+    this.#generation += 1;
+    return this.#generation;
+  }
+
+  isCurrent(generation: number): boolean {
+    return generation === this.#generation;
+  }
+}
+
 export function updateDirtyState(
   state: { dirty: boolean },
   dirty: boolean,

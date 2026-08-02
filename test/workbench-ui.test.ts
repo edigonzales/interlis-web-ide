@@ -5,6 +5,7 @@ import {
   defaultWorkbenchLayoutSettings,
   outlineCodiconName,
   parseWorkbenchLayoutSettings,
+  SuggestionRequestGate,
   updateDirtyState,
 } from "../src/workbench/ui-state.js";
 
@@ -78,6 +79,19 @@ describe("workbench UI state", () => {
     vi.advanceTimersByTime(75);
     expect(outlines).toHaveBeenCalledOnce();
     expect(outlines).toHaveBeenCalledWith(99);
+  });
+
+  it("invalidates stale suggestion requests", () => {
+    const gate = new SuggestionRequestGate();
+    const first = gate.next();
+    expect(gate.isCurrent(first)).toBe(true);
+
+    const second = gate.next();
+    expect(gate.isCurrent(first)).toBe(false);
+    expect(gate.isCurrent(second)).toBe(true);
+
+    gate.invalidate();
+    expect(gate.isCurrent(second)).toBe(false);
   });
 
   it("cancels deferred work and renders dirty state only on transitions", () => {
