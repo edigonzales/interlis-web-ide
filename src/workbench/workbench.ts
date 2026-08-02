@@ -2135,7 +2135,6 @@ export class WebIdeWorkbench {
     if (!isCurrent()) return;
     if (items.length === 0) hide();
     else {
-      hideOnce();
       await Promise.resolve();
       if (!isCurrent()) return;
       target.trigger(
