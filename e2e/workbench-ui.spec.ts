@@ -133,6 +133,49 @@ test("closes the diagram when closing the active model", async ({ page }) => {
   await expect(diagram).toBeHidden();
 });
 
+test("hides tab strip scrollbars while keeping overflowing tabs scrollable", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 584, height: 489 });
+  await page.goto("./");
+
+  const tabs = page.locator("#tabs");
+  await expect(tabs).toBeVisible();
+  await expect
+    .poll(() =>
+      tabs.evaluate((element) => {
+        const style = getComputedStyle(element);
+        return {
+          hasVerticalOverflow: element.scrollHeight > element.clientHeight,
+          overflowX: style.overflowX,
+          overflowY: style.overflowY,
+          scrollbarWidth: style.scrollbarWidth,
+        };
+      }),
+    )
+    .toEqual({
+      hasVerticalOverflow: false,
+      overflowX: "auto",
+      overflowY: "hidden",
+      scrollbarWidth: "none",
+    });
+
+  for (let index = 0; index < 4; index++)
+    await page.getByRole("button", { name: "New Model", exact: true }).click();
+  await expect
+    .poll(() =>
+      tabs.evaluate((element) => element.scrollWidth > element.clientWidth),
+    )
+    .toBe(true);
+
+  await tabs.evaluate((element) =>
+    element.scrollTo({ left: element.scrollWidth }),
+  );
+  await expect
+    .poll(() => tabs.evaluate((element) => element.scrollLeft))
+    .toBeGreaterThan(0);
+});
+
 test("hides Monaco scrollbars while keeping the editor scrollable", async ({
   page,
 }) => {
@@ -154,16 +197,13 @@ test("hides Monaco scrollbars while keeping the editor scrollable", async ({
   );
 
   const linesContent = editor.locator(".lines-content");
-  for (let index = 0; index < 40; index++)
-    await page.keyboard.press("ArrowUp");
+  for (let index = 0; index < 40; index++) await page.keyboard.press("ArrowUp");
   await expect
     .poll(() => linesContent.getAttribute("style"))
     .toContain("top: 0px");
   const before = await linesContent.getAttribute("style");
   await page.keyboard.press("PageDown");
-  await expect
-    .poll(() => linesContent.getAttribute("style"))
-    .not.toBe(before);
+  await expect.poll(() => linesContent.getAttribute("style")).not.toBe(before);
 });
 
 test("light-dismisses the compact Codicon command palette", async ({

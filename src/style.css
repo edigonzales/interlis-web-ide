@@ -650,15 +650,20 @@ button:hover {
 }
 .tabs {
   display: flex;
-  overflow: auto;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
   background: var(--title);
   border-bottom: 1px solid var(--border);
+}
+.tabs::-webkit-scrollbar {
+  display: none;
 }
 .tab {
   display: flex;
   min-width: 120px;
   max-width: 220px;
-  height: 35px;
+  height: 100%;
   align-items: center;
   border-right: 1px solid var(--border);
   font-size: 12px;
