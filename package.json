@@ -16,7 +16,8 @@
     "test:coverage": "vitest run --coverage",
     "lint": "eslint .",
     "format:check": "prettier --check .",
-    "check": "pnpm lint && pnpm typecheck && pnpm test && pnpm build",
+    "check": "pnpm lint && pnpm typecheck && pnpm test && pnpm test:release && pnpm build",
+    "test:release": "node --test test/release/*Test.mjs",
     "e2e": "playwright test",
     "e2e:public-clone": "RUN_PUBLIC_CLONE=1 playwright test e2e/public-clone.spec.ts"
   },

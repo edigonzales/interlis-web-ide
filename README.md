@@ -84,7 +84,9 @@ Die lokalen Overrides verwenden stabile Dateinamen wie
 `ilic-language-service-snapshot.tgz`. Die darin enthaltenen Paketmanifeste und
 das Lockfile halten trotzdem die vollständigen unveränderlichen Versionen
 `0.1.0-SNAPSHOT.<UTC-Zeitstempel>` beziehungsweise
-`0.9.9-SNAPSHOT.<UTC-Zeitstempel>` fest. Dadurch erfordert ein neuer
+stabil `0.9.10` oder `0.9.10-SNAPSHOT.<UTC-Zeitstempel>[.<Build-ID>]` fest.
+Die Dateiendung `-snapshot.tgz` ist nur ein lokaler Alias und sagt nichts über
+die interne Paketversion aus. Dadurch erfordert ein neuer
 Cross-Repository-Snapshot keine manuelle Pfadanpassung.
 
 Die Web-IDE-Installation verwendet bewusst `--no-frozen-lockfile --force

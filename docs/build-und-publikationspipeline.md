@@ -54,11 +54,14 @@ Die Web IDE installiert `@ilic/*` nicht über ein bewegtes Registry-Dist-Tag.
 `pnpm-workspace.yaml` überschreibt die sechs direkten `@ilic/*`-Abhängigkeiten
 mit stabil benannten Tarballs unter
 `../interlis-language-tools/artifacts/npm/`. Diese Tarballs enthalten trotzdem
-vollständige, unveränderliche Snapshot-Versionen und exakte interne
-Abhängigkeiten.
+vollständige, unveränderliche Versionen und exakte interne Abhängigkeiten. Der
+Dateiname `*-snapshot.tgz` ist nur ein lokaler Alias; sein Manifest kann einen
+stabilen Compiler `0.9.10` oder einen exakten `0.9.10-SNAPSHOT...` enthalten.
+Die `snapshot`-Deklarationen in `package.json` werden durch diese lokalen
+Workspace-Overrides ersetzt und lösen im Release-Build nichts aus der Registry.
 
 Vor jedem Web-Build werden deshalb zuerst der Compiler-WASM und danach alle
-sieben Cross-Repository-Tarballs neu erzeugt. Das macht den Build unabhängig
+acht Cross-Repository-Tarballs neu erzeugt. Das macht den Build unabhängig
 vom aktuellen Zustand des npm-Tags `snapshot` und prüft genau die ausgewählten
 Quellen.
 
@@ -125,7 +128,7 @@ Der normale produktive Weg beginnt nach einem erfolgreichen npm-Release in
 {
   "compiler_sha": "<vollständiger SHA>",
   "language_tools_sha": "<vollständiger SHA>",
-  "compiler_version": "0.9.9-SNAPSHOT....",
+  "compiler_version": "0.9.10",
   "language_tools_version": "0.1.0-SNAPSHOT....",
   "compiler_timestamp": "YYYYMMDDHHmmss",
   "compiler_build_id": "<Compiler-Publish-Run-ID>",
@@ -142,6 +145,16 @@ Rekonstruktion werden `language_timestamp`, `language_build_id` und
 erzeugten Tarballs dieselben Paketversionen wie der koordinierte npm-Release
 tragen.
 
+`compiler_version` darf stabil `0.9.10` oder ein exakter
+`0.9.10-SNAPSHOT.YYYYMMDDHHmmss[.<build-id>]` sein. Die Basis wird vor der
+Emscripten-Installation gegen `project(ilic VERSION ...)` im ausgecheckten
+Compiler geprüft. Ebenso muss die Basis von `language_tools_version` der
+Workspace-Version im ausgecheckten Language-Tools-`package.json` entsprechen.
+Stable-Metadaten enthalten keine Compiler-Zeit/Build-ID; Snapshot-Metadaten
+müssen exakt mit der Versionszeichenfolge übereinstimmen.
+Eine Abweichung endet beispielsweise mit
+`Compiler version ... has base ..., but checked-out ilic source has base ...`.
+
 Der `repository_dispatch`-Payload bleibt unter GitHubs Limit von zehn
 Eigenschaften. `language_timestamp` und `language_build_id` sind deshalb die
 verbindlichen Language-Tools-Felder; redundante Alias-Felder wie `timestamp`
@@ -156,7 +169,7 @@ des Ereignisses. Compiler- und Language-Build-ID bleiben getrennt.
 Der Pages-Build wiederholt bewusst die auslieferungsrelevanten Schritte:
 
 1. Compiler-WASM aus dem ausgewählten Compiler-SHA bauen;
-2. sieben Tarballs aus dem ausgewählten Language-Tools-SHA mit der exakten
+2. acht Tarballs aus dem ausgewählten Language-Tools-SHA mit der exakten
    Compiler-Version und der separaten Language-Zeit-/Build-ID bauen und als
    Consumer prüfen;
 3. Web-IDE-Abhängigkeiten mit `pnpm install --no-frozen-lockfile --force
@@ -202,8 +215,11 @@ Bei einem manuellen Start existiert kein Release-Payload. Der Workflow erzeugt
 deshalb eine eigene UTC-Zeit und verwendet die aktuelle Workflow-Run-ID.
 Compiler- und Language-Tools-SHA werden nach dem Checkout festgehalten; es
 entsteht bewusst ein Live-/Entwicklungsbuild und kein Nachweis für ein bereits
-publiziertes npm-Manifest. Leere Event-Felder werden nicht als Snapshot-Werte
-an `pack:verify` weitergereicht.
+publiziertes npm-Manifest. Die Compilerbasis wird direkt aus dem ausgecheckten
+`CMakeLists.txt` gelesen; die Language-Basis wird aus dem ausgecheckten
+`package.json` gelesen und erhält die neue Laufzeit und Run-ID. Damit bleibt
+der Recovery-Pfad intern konsistent, ist aber weiterhin kein Nachweis eines
+zuvor publizierten Release-Payloads.
 
 Nur `release-train-published` ist ein reproduzierbarer Release-Build: Dort sind
 beide SHAs und die exakten Versionen im Payload gepinnt.
@@ -282,6 +298,20 @@ corepack pnpm install --no-frozen-lockfile --force --update-checksums
 corepack pnpm check
 corepack pnpm e2e
 corepack pnpm preview
+```
+
+Für einen Snapshot muss der WASM-Build dieselbe Produktidentität erhalten:
+
+```sh
+export COMPILER_VERSION=0.9.10-SNAPSHOT.20260804120000.123456
+cd ../ilic-fork
+ILIC_WASM_VERSION="$COMPILER_VERSION" ./scripts/build-wasm.sh
+cd ../interlis-language-tools
+COMPILER_VERSION="$COMPILER_VERSION" \
+  COMPILER_SHA="$(git -C ../ilic-fork rev-parse HEAD)" \
+  SNAPSHOT_TIMESTAMP=20260804130000 \
+  SNAPSHOT_BUILD_ID=123457 \
+  corepack pnpm pack:verify
 ```
 
 Für eine exakte koordinierte Tarball-Version vor `pack:verify` setzen:
