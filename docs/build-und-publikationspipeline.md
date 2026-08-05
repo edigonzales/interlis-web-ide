@@ -25,7 +25,7 @@ flowchart LR
 | Workflow                                                                                  | Trigger                                                | Ergebnis                                                                             |
 | ----------------------------------------------------------------------------------------- | ------------------------------------------------------ | ------------------------------------------------------------------------------------ |
 | [`.github/workflows/ci.yml`](../.github/workflows/ci.yml)                                 | Push auf `main` oder `codex/**` (ausser reine Markdown-Änderungen), Pull Request (ausser reine Markdown-Änderungen), manuell | Build-, Unit- und Browser-Tests; Runtime- und Testartefakte für 14 Tage              |
-| [`.github/workflows/pages.yml`](../.github/workflows/pages.yml)                           | `release-train-published`, manuell                    | Gepinnte Quellen und lokale Tarballs neu bauen, `pnpm check`, nur `dist/` nach Pages deployen |
+| [`.github/workflows/deploy-web-ide.yml`](../.github/workflows/deploy-web-ide.yml)                           | `release-train-published`, manuell                    | Gepinnte Quellen und lokale Tarballs neu bauen, `pnpm check`, nur `dist/` nach Pages deployen |
 | [`.github/workflows/public-clone-smoke.yml`](../.github/workflows/public-clone-smoke.yml) | montags 04:17 UTC, manuell                             | realen öffentlichen HTTPS-Shallow-Clone in Chromium prüfen                           |
 
 Die drei Abläufe haben unterschiedliche Zwecke: CI liefert die technische
@@ -205,17 +205,21 @@ Build nach einem neueren live geht.
 ## Direkter `main`- und manueller Pages-Build
 
 Ein Push auf den Web-IDE-Branch `main` startet nur den CI-Workflow. Ein
-manueller Pages-Start ist weiterhin möglich und verwendet die `main`-Stände von
-Compiler und Language Tools; er ist ein bewusst nicht release-gepinnter
-Live-/Recovery-Build. Der produktive automatische Pages-Weg verwendet dagegen
+manueller Pages-Start ist weiterhin möglich. Ohne Eingaben verwendet er die
+`main`-Stände von Compiler und Language Tools; alternativ können
+`compiler_sha` plus `compiler_version` und optional `language_tools_sha`
+angegeben werden. Damit lässt sich ein stabil getaggter `ilic`-Commit exakt
+verwenden, während das Ergebnis weiterhin nur ein Web-IDE-Snapshot-Deployment
+ist. Der produktive automatische Pages-Weg verwendet dagegen
 ausschließlich den `release-train-published`-Payload mit einer bereits
 publizierten Quellpaarung.
 
 Bei einem manuellen Start existiert kein Release-Payload. Der Workflow erzeugt
 deshalb eine eigene UTC-Zeit und verwendet die aktuelle Workflow-Run-ID.
-Compiler- und Language-Tools-SHA werden nach dem Checkout festgehalten; es
-entsteht bewusst ein Live-/Entwicklungsbuild und kein Nachweis für ein bereits
-publiziertes npm-Manifest. Die Compilerbasis wird direkt aus dem ausgecheckten
+Compiler- und Language-Tools-SHA werden nach dem Checkout festgehalten. Bei
+angegebenem stabilem Compiler-SHA ist der Compiler-Teil release-gepinnt; es
+entsteht trotzdem bewusst nur ein Web-IDE-Snapshot-Deployment und kein neuer
+stabiler npm- oder Pages-Release. Ohne Eingaben wird die Compilerbasis direkt aus dem ausgecheckten
 `CMakeLists.txt` gelesen; die Language-Basis wird aus dem ausgecheckten
 `package.json` gelesen und erhält die neue Laufzeit und Run-ID. Damit bleibt
 der Recovery-Pfad intern konsistent, ist aber weiterhin kein Nachweis eines
