@@ -18,14 +18,14 @@ function metadata(overrides = {}) {
     compilerVersion: "0.9.10-SNAPSHOT.20260804120000.123456",
     compilerTimestamp: "20260804120000",
     compilerBuildId: "123456",
-    languageToolsVersion: "0.1.0-SNAPSHOT.20260804130000.234567",
+    languageToolsVersion: "0.1.1-SNAPSHOT.20260804130000.234567",
     languageTimestamp: "20260804130000",
     languageBuildId: "234567",
     releaseRunId: "345678",
     checkedOutCompilerSha: compilerSha,
     checkedOutLanguageToolsSha: languageToolsSha,
     checkedOutCompilerBaseVersion: "0.9.10",
-    checkedOutLanguageToolsBaseVersion: "0.1.0",
+    checkedOutLanguageToolsBaseVersion: "0.1.1",
     ...overrides,
   };
 }
@@ -74,7 +74,7 @@ test("rejects language-tools versions that do not match the checked-out source",
           languageToolsVersion: "0.2.0-SNAPSHOT.20260804130000.234567",
         }),
       ),
-    /checked-out language-tools source has base 0\.1\.0/i,
+    /checked-out language-tools source has base 0\.1\.1/i,
   );
 });
 
@@ -142,12 +142,12 @@ test("reads exactly one ilic CMake project version", () => {
 test("reads the language-tools workspace version", () => {
   assert.equal(
     readLanguageToolsProjectVersion(
-      '{"name":"interlis-language-tools-workspace","version":"0.1.0"}',
+      '{"name":"interlis-language-tools-workspace","version":"0.1.1"}',
     ),
-    "0.1.0",
+    "0.1.1",
   );
   assert.throws(() => readLanguageToolsProjectVersion("not-json"));
   assert.throws(() =>
-    readLanguageToolsProjectVersion('{"name":"other","version":"0.1.0"}'),
+    readLanguageToolsProjectVersion('{"name":"other","version":"0.1.1"}'),
   );
 });

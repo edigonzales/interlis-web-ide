@@ -129,7 +129,7 @@ Der normale produktive Weg beginnt nach einem erfolgreichen npm-Release in
   "compiler_sha": "<vollständiger SHA>",
   "language_tools_sha": "<vollständiger SHA>",
   "compiler_version": "0.9.10",
-  "language_tools_version": "0.1.0-SNAPSHOT....",
+  "language_tools_version": "0.1.1-SNAPSHOT....",
   "compiler_timestamp": "YYYYMMDDHHmmss",
   "compiler_build_id": "<Compiler-Publish-Run-ID>",
   "language_timestamp": "YYYYMMDDHHmmss",

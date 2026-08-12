@@ -83,7 +83,7 @@ corepack pnpm e2e
 Die lokalen Overrides verwenden stabile Dateinamen wie
 `ilic-language-service-snapshot.tgz`. Die darin enthaltenen Paketmanifeste und
 das Lockfile halten trotzdem die vollständigen unveränderlichen Versionen
-`0.1.0-SNAPSHOT.<UTC-Zeitstempel>` beziehungsweise
+`0.1.1-SNAPSHOT.<UTC-Zeitstempel>` beziehungsweise
 stabil `0.9.10` oder `0.9.10-SNAPSHOT.<UTC-Zeitstempel>[.<Build-ID>]` fest.
 Die Dateiendung `-snapshot.tgz` ist nur ein lokaler Alias und sagt nichts über
 die interne Paketversion aus. Dadurch erfordert ein neuer
