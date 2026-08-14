@@ -42,9 +42,31 @@ jobs:
           cache-dependency-path: |
             interlis-language-tools/pnpm-lock.yaml
             interlis-web-ide/pnpm-lock.yaml
+      - name: Resolve CI snapshot metadata
+        id: metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+          timestamp=$(date -u +%Y%m%d%H%M%S)
+          build_id="$GITHUB_RUN_ID"
+          compiler_base_version=$(node --input-type=module -e '
+            import { readFile } from "node:fs/promises";
+            import { readIlicProjectVersion } from "./interlis-web-ide/scripts/validate-release-metadata.mjs";
+            process.stdout.write(readIlicProjectVersion(await readFile("ilic-fork/CMakeLists.txt", "utf8")));
+          ')
+          compiler_version="${compiler_base_version}-SNAPSHOT.${timestamp}.${build_id}"
+          compiler_sha=$(git -C ilic-fork rev-parse HEAD)
+          {
+            echo "timestamp=$timestamp"
+            echo "build_id=$build_id"
+            echo "compiler_version=$compiler_version"
+            echo "compiler_sha=$compiler_sha"
+          } >> "$GITHUB_OUTPUT"
       - name: Build pinned compiler WASM
         shell: bash
         working-directory: ilic-fork
+        env:
+          ILIC_WASM_VERSION: ${{ steps.metadata.outputs.compiler_version }}
         run: |
           set -euo pipefail
           emscripten_version=$(tr -d '[:space:]' < .emscripten-version)
@@ -55,6 +77,11 @@ jobs:
           ./scripts/build-wasm.sh
       - name: Build cross-repository npm tarballs
         working-directory: interlis-language-tools
+        env:
+          SNAPSHOT_TIMESTAMP: ${{ steps.metadata.outputs.timestamp }}
+          SNAPSHOT_BUILD_ID: ${{ steps.metadata.outputs.build_id }}
+          COMPILER_VERSION: ${{ steps.metadata.outputs.compiler_version }}
+          COMPILER_SHA: ${{ steps.metadata.outputs.compiler_sha }}
         run: pnpm install --frozen-lockfile && pnpm pack:verify
       # Cross-repository tarballs are generated during this job. Their bytes,
       # and therefore their local file integrity, are intentionally resolved
