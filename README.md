@@ -1,7 +1,7 @@
 # INTERLIS Web IDE
 
 Offline-first, vollständig clientseitige INTERLIS-IDE für
-<https://edigonzales.github.io/interlis-web-ide/>. Monaco und die
+<https://ide.interlis.guru/>. Monaco und die
 VS-Code-Service-Komponenten stellen die Workbench bereit; die gleichen
 `@ilic/language-service`-Funktionen laufen ohne REST-Backend oder JSON-RPC direkt
 im Browser.
