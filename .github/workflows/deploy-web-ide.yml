@@ -86,6 +86,8 @@ jobs:
           else
             compiler_sha=$(git -C ilic-fork rev-parse HEAD)
             language_tools_sha=$(git -C interlis-language-tools rev-parse HEAD)
+            language_timestamp=$(date -u +%Y%m%d%H%M%S)
+            language_build_id="$GITHUB_RUN_ID"
             if [[ -n "$INPUT_COMPILER_SHA" || -n "$INPUT_COMPILER_VERSION" ]]; then
               [[ -n "$INPUT_COMPILER_SHA" && -n "$INPUT_COMPILER_VERSION" ]] || {
                 echo "compiler_sha and compiler_version must be supplied together" >&2
@@ -97,14 +99,13 @@ jobs:
               }
               compiler_version="$INPUT_COMPILER_VERSION"
             else
-              compiler_version=$(node --input-type=module -e '
+              compiler_base_version=$(node --input-type=module -e '
                 import { readFile } from "node:fs/promises";
                 import { readIlicProjectVersion } from "./interlis-web-ide/scripts/validate-release-metadata.mjs";
                 process.stdout.write(readIlicProjectVersion(await readFile("ilic-fork/CMakeLists.txt", "utf8")));
               ')
+              compiler_version="${compiler_base_version}-SNAPSHOT.${language_timestamp}.${language_build_id}"
             fi
-            language_timestamp=$(date -u +%Y%m%d%H%M%S)
-            language_build_id="$GITHUB_RUN_ID"
             language_base_version=$(node -p "require('./interlis-language-tools/package.json').version")
             language_tools_version="${language_base_version}-SNAPSHOT.${language_timestamp}.${language_build_id}"
             {
