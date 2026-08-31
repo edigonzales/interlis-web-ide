@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "project": "interlis-web-ide",
+  "artifactBaseVersion": "0.1.0",
+  "dependencies": {
+    "compiler": {
+      "version": "0.10.0-SNAPSHOT.20260826043335.32930660314",
+      "sourceSha": "e901af64247082b5164252b675d87bd7a2aa829d"
+    },
+    "languageTools": {
+      "version": "0.1.2-SNAPSHOT.20260826044748.32930961069",
+      "sourceSha": "f8be06884fee0c193d5370d7b941466c09986560",
+      "legacyWithoutDependencyLock": true
+    }
+  }
+}

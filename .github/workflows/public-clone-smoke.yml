@@ -11,20 +11,26 @@ permissions:
 jobs:
   clone:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v6
         with:
           path: interlis-web-ide
           persist-credentials: false
+      - name: Read committed dependency lock
+        id: lock
+        working-directory: interlis-web-ide
+        run: node scripts/release-metadata.mjs export-github-output --output "$GITHUB_OUTPUT"
       - uses: actions/checkout@v6
         with:
           repository: edigonzales/interlis-language-tools
+          ref: ${{ steps.lock.outputs.language_tools_sha }}
           path: interlis-language-tools
           persist-credentials: false
       - uses: actions/checkout@v6
         with:
           repository: edigonzales/ilic-fork
+          ref: ${{ steps.lock.outputs.compiler_sha }}
           path: ilic-fork
           persist-credentials: false
       - uses: pnpm/action-setup@v4
@@ -37,24 +43,9 @@ jobs:
           cache-dependency-path: |
             interlis-language-tools/pnpm-lock.yaml
             interlis-web-ide/pnpm-lock.yaml
-      - name: Build pinned compiler WASM
-        shell: bash
-        working-directory: ilic-fork
-        run: |
-          set -euo pipefail
-          emscripten_version=$(tr -d '[:space:]' < .emscripten-version)
-          git clone --depth 1 https://github.com/emscripten-core/emsdk.git "$RUNNER_TEMP/emsdk"
-          "$RUNNER_TEMP/emsdk/emsdk" install "$emscripten_version"
-          "$RUNNER_TEMP/emsdk/emsdk" activate "$emscripten_version"
-          source "$RUNNER_TEMP/emsdk/emsdk_env.sh"
-          ./scripts/build-wasm.sh
-      - name: Build cross-repository npm tarballs
-        working-directory: interlis-language-tools
-        run: pnpm install --frozen-lockfile && pnpm pack:verify
-      # The downloaded runtime contains freshly generated local tarballs. CI's
-      # implicit frozen mode must be disabled while refreshing their checksums.
-      - run: pnpm install --no-frozen-lockfile --force --update-checksums
+      - name: Build and install exact locked dependencies
         working-directory: interlis-web-ide
+        run: ./scripts/prepare-locked-dependencies.sh
       - run: pnpm exec playwright install --with-deps chromium
         working-directory: interlis-web-ide
       - run: pnpm e2e:public-clone --project chromium

@@ -1,4 +1,4 @@
-# Diagnostics and Problems
+# Diagnostik und Probleme
 
 Die Web-IDE projiziert Compilation-Diagnosen in `ProblemItem`-Werte. Jede
 Problem-ID basiert auf URI, Code, Byte-Range und Fingerprint beziehungsweise
