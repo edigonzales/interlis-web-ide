@@ -3,6 +3,7 @@
 import { appendFile, mkdir, readFile, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { execFileSync } from "node:child_process";
+import { createRequire } from "node:module";
 import { dirname, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
@@ -154,6 +155,112 @@ export async function verifyUpstreams({
   return lock;
 }
 
+async function readInstalledPackage(projectRoot, name, fromDirectory = projectRoot) {
+  const resolver = createRequire(resolve(fromDirectory, "package.json"));
+  let entry;
+  try {
+    entry = resolver.resolve(name);
+  } catch (error) {
+    throw new Error(
+      `Installed package ${name} could not be resolved: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+
+  let packageRoot = dirname(entry);
+  while (true) {
+    const manifestPath = resolve(packageRoot, "package.json");
+    if (existsSync(manifestPath)) {
+      const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
+      if (manifest.name === name) {
+        return {
+          root: packageRoot,
+          manifest,
+          releasePath: resolve(packageRoot, "interlis-release.json"),
+        };
+      }
+    }
+    const parent = dirname(packageRoot);
+    if (parent === packageRoot) break;
+    packageRoot = parent;
+  }
+  throw new Error(`Installed package ${name} has no matching package.json`);
+}
+
+function verifyInstalledPackage(packageInfo, expectedVersion, expectedSha) {
+  const { name, version, gitHead } = packageInfo.manifest;
+  if (name !== packageInfo.expectedName) {
+    throw new Error(`Installed package name mismatch: expected ${packageInfo.expectedName}, found ${String(name)}`);
+  }
+  if (version !== expectedVersion) {
+    throw new Error(`${packageInfo.expectedName} version does not match the locked version`);
+  }
+  requireFullSha(gitHead, `${packageInfo.expectedName} gitHead`);
+  if (gitHead !== expectedSha) {
+    throw new Error(`${packageInfo.expectedName} gitHead does not match the locked source SHA`);
+  }
+}
+
+async function readInstalledRelease(packageInfo) {
+  if (!existsSync(packageInfo.releasePath)) {
+    throw new Error(`${packageInfo.expectedName} is missing interlis-release.json`);
+  }
+  return JSON.parse(await readFile(packageInfo.releasePath, "utf8"));
+}
+
+export async function verifyInstalled(projectRoot) {
+  const lock = await checkProject(projectRoot);
+  const compiler = lock.dependencies.compiler;
+  const language = lock.dependencies.languageTools;
+  const languagePackages = [];
+
+  for (const name of LANGUAGE_PACKAGES) {
+    const packageInfo = await readInstalledPackage(projectRoot, name);
+    packageInfo.expectedName = name;
+    verifyInstalledPackage(packageInfo, language.version, language.sourceSha);
+    const release = await readInstalledRelease(packageInfo);
+    requireFullSha(release.gitHead, `${name} release gitHead`);
+    if (release.gitHead !== language.sourceSha) {
+      throw new Error(`${name} release gitHead does not match the locked source SHA`);
+    }
+    if (!language.legacyWithoutDependencyLock) {
+      for (const compilerName of ["@ilic/compiler-wasm", "@ilic/repository-core", "@ilic/tools"]) {
+        const dependency = release.dependencies?.[compilerName];
+        if (
+          dependency?.version !== compiler.version ||
+          dependency?.sourceSha !== compiler.sourceSha
+        ) {
+          throw new Error(`${name} release compiler dependency ${compilerName} does not match the Web IDE lock`);
+        }
+      }
+    }
+    languagePackages.push(packageInfo);
+  }
+
+  const tools = await readInstalledPackage(projectRoot, "@ilic/tools");
+  tools.expectedName = "@ilic/tools";
+  verifyInstalledPackage(tools, compiler.version, compiler.sourceSha);
+
+  const languageService = languagePackages.find(
+    ({ expectedName }) => expectedName === "@ilic/language-service",
+  );
+  const repositoryCore = await readInstalledPackage(
+    projectRoot,
+    "@ilic/repository-core",
+    tools.root,
+  );
+  repositoryCore.expectedName = "@ilic/repository-core";
+  verifyInstalledPackage(repositoryCore, compiler.version, compiler.sourceSha);
+
+  const compilerWasm = await readInstalledPackage(
+    projectRoot,
+    "@ilic/compiler-wasm",
+    languageService.root,
+  );
+  compilerWasm.expectedName = "@ilic/compiler-wasm";
+  verifyInstalledPackage(compilerWasm, compiler.version, compiler.sourceSha);
+  return lock;
+}
+
 export function assertStableDependencies(lock) {
   for (const [name, dependency] of Object.entries(lock.dependencies)) {
     if (!SEMVER.test(dependency.version)) {
@@ -207,6 +314,11 @@ async function main() {
     process.stdout.write("locked upstream sources are consistent\n");
     return;
   }
+  if (command === "verify-installed") {
+    await verifyInstalled(options.projectRoot);
+    process.stdout.write("installed package provenance is consistent\n");
+    return;
+  }
   if (command === "export-github-output") {
     if (!options.output) throw new Error("export-github-output requires --output");
     const lock = await checkProject(options.projectRoot);
@@ -231,7 +343,7 @@ async function main() {
     await writeFile(options.output, jsonText(manifest));
     return;
   }
-  throw new Error("Expected check, verify-upstreams, export-github-output, or manifest");
+  throw new Error("Expected check, verify-upstreams, verify-installed, export-github-output, or manifest");
 }
 
 const invokedPath = process.argv[1] ? pathToFileURL(resolve(process.argv[1])).href : "";

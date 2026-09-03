@@ -10,12 +10,89 @@ import {
   createReleaseManifest,
   parsePublishedVersion,
   snapshotVersion,
+  verifyInstalled,
   verifyUpstreams,
 } from "../../scripts/release-metadata.mjs";
 import { renderLocalWorkspace } from "../../scripts/render-local-workspace.mjs";
 
 const root = resolve(import.meta.dirname, "../..");
 const webSha = "0123456789abcdef0123456789abcdef01234567";
+
+async function createInstalledFixture() {
+  const fixture = await mkdtemp(join(tmpdir(), "web-installed-release-"));
+  const project = join(fixture, "web");
+  const compilerSha = "a".repeat(40);
+  const languageSha = "b".repeat(40);
+  const compilerVersion = `0.10.0-snapshot.g${compilerSha.slice(0, 12)}`;
+  const languageVersion = `0.1.2-snapshot.g${languageSha.slice(0, 12)}`;
+  await mkdir(join(project, "release"), { recursive: true });
+  await writeFile(
+    join(project, "package.json"),
+    JSON.stringify({
+      name: "interlis-web-ide",
+      version: "0.1.0",
+      dependencies: {
+        "@ilic/tools": compilerVersion,
+        "@ilic/diagram": languageVersion,
+        "@ilic/docx": languageVersion,
+        "@ilic/language-service": languageVersion,
+        "@ilic/monaco-adapter": languageVersion,
+      },
+    }),
+  );
+  await writeFile(
+    join(project, "release/dependencies.lock.json"),
+    JSON.stringify({
+      schemaVersion: 1,
+      project: "interlis-web-ide",
+      artifactBaseVersion: "0.1.0",
+      dependencies: {
+        compiler: { version: compilerVersion, sourceSha: compilerSha },
+        languageTools: { version: languageVersion, sourceSha: languageSha },
+      },
+    }),
+  );
+
+  async function installPackage(parent, name, version, gitHead, release) {
+    const packageRoot = join(parent, "node_modules", ...name.split("/"));
+    await mkdir(packageRoot, { recursive: true });
+    await writeFile(
+      join(packageRoot, "package.json"),
+      JSON.stringify({ name, version, gitHead, main: "index.js" }),
+    );
+    await writeFile(join(packageRoot, "index.js"), "export {};\n");
+    if (release) {
+      await writeFile(
+        join(packageRoot, "interlis-release.json"),
+        JSON.stringify(release),
+      );
+    }
+    return packageRoot;
+  }
+
+  const languageRelease = {
+    gitHead: languageSha,
+    dependencies: Object.fromEntries(
+      ["@ilic/compiler-wasm", "@ilic/repository-core", "@ilic/tools"].map(
+        (name) => [name, { version: compilerVersion, sourceSha: compilerSha }],
+      ),
+    ),
+  };
+  const toolsRoot = await installPackage(project, "@ilic/tools", compilerVersion, compilerSha);
+  await installPackage(toolsRoot, "@ilic/repository-core", compilerVersion, compilerSha);
+  const languageServiceRoot = await installPackage(
+    project,
+    "@ilic/language-service",
+    languageVersion,
+    languageSha,
+    languageRelease,
+  );
+  await installPackage(languageServiceRoot, "@ilic/compiler-wasm", compilerVersion, compilerSha);
+  for (const name of ["@ilic/diagram", "@ilic/docx", "@ilic/monaco-adapter"]) {
+    await installPackage(project, name, languageVersion, languageSha, languageRelease);
+  }
+  return { project, languageServiceRoot };
+}
 
 test("checks the committed Web IDE contract without sibling tarballs", async () => {
   const lock = await checkProject(root);
@@ -68,7 +145,41 @@ test("deployment workflow has lock-only triggers", async () => {
   const workflow = await readFile(resolve(root, ".github/workflows/deploy-web-ide.yml"), "utf8");
   assert.match(workflow, /workflow_dispatch:/u);
   assert.match(workflow, /tags:\s*\n\s*- "v\*"/u);
+  assert.match(workflow, /pnpm install --frozen-lockfile/u);
+  assert.match(workflow, /pnpm release:verify-installed/u);
+  assert.match(workflow, /pnpm check/u);
   assert.doesNotMatch(workflow, /repository_dispatch:|client_payload|SNAPSHOT_TIMESTAMP/u);
+  assert.doesNotMatch(workflow, /interlis-language-tools|ilic-fork|prepare-locked-dependencies|build-wasm|emsdk/u);
+});
+
+test("verifies installed published package provenance", async () => {
+  const fixture = await createInstalledFixture();
+  const lock = await verifyInstalled(fixture.project);
+  assert.equal(lock.dependencies.compiler.sourceSha, "a".repeat(40));
+});
+
+test("rejects an installed package with a mismatched gitHead", async () => {
+  const fixture = await createInstalledFixture();
+  const manifestPath = join(fixture.languageServiceRoot, "package.json");
+  const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
+  manifest.gitHead = "c".repeat(40);
+  await writeFile(manifestPath, JSON.stringify(manifest));
+  await assert.rejects(
+    () => verifyInstalled(fixture.project),
+    /gitHead does not match the locked source SHA/u,
+  );
+});
+
+test("rejects an installed package with a mismatched compiler release manifest", async () => {
+  const fixture = await createInstalledFixture();
+  const releasePath = join(fixture.languageServiceRoot, "interlis-release.json");
+  const release = JSON.parse(await readFile(releasePath, "utf8"));
+  release.dependencies["@ilic/tools"].sourceSha = "c".repeat(40);
+  await writeFile(releasePath, JSON.stringify(release));
+  await assert.rejects(
+    () => verifyInstalled(fixture.project),
+    /release compiler dependency @ilic\/tools does not match/u,
+  );
 });
 
 test("renders local tarball overrides for an explicit Language-Tools checkout", () => {

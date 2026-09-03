@@ -37,16 +37,28 @@ Compiler-Lock exakt übereinstimmt.
 ## Prüfungen und Provenienz
 
 ```sh
+pnpm install --frozen-lockfile
 pnpm release:check
+pnpm release:verify-installed
 pnpm test:release
-./scripts/prepare-locked-dependencies.sh
 pnpm check
 ```
 
 `test:release` benötigt keine Tarballs oder Nachbar-Repositories. Die
-repositoryübergreifende Prüfung checkt dagegen beide Upstreams am gelockten
-SHA, baut daraus Compiler-WASM und fünf Language-Tools-Tarballs und installiert
-diese über die lokale Override-Vorlage.
+zusätzliche `release:verify-installed`-Prüfung kontrolliert die installierten
+publizierten Pakete anhand ihrer exakten Versionen, `gitHead`-Werte und
+`interlis-release.json`-Manifeste gegen den Web-IDE-Lock.
+
+Die vollständige repositoryübergreifende Prüfung wird separat ausgeführt:
+
+```sh
+./scripts/prepare-locked-dependencies.sh
+```
+
+Sie checkt beide Upstreams am gelockten SHA, baut Compiler-WASM und fünf
+Language-Tools-Tarballs und installiert diese über die lokale Override-Vorlage.
+Sie bleibt Bestandteil von CI, Public-Clone-Smoke und lokaler
+Cross-Repository-Verifikation, nicht aber des Pages-Deploys.
 
 Beim Deployment wird `dist/interlis-release.json` erzeugt. Es enthält
 Web-Version und -SHA, beide Abhängigkeitsversionen und -SHAs, Kanal,
@@ -56,11 +68,18 @@ GitHub-Run-ID, Zeitpunkt und Node-Toolchain.
 
 1. Lock-Änderung und normalen CI-Lauf auf `main` abschliessen.
 2. **Deploy Web IDE** manuell auf `main` starten.
-3. Der Workflow baut ausschliesslich die committeten SHAs, führt `pnpm check`
-   aus, erzeugt `0.1.0-snapshot.g<web-sha>` und deployt `dist/` nach Pages.
+3. Der Workflow installiert ausschliesslich die im `pnpm-lock.yaml` festgelegten
+   publizierten Pakete, prüft deren Provenienz, führt `pnpm check` aus, erzeugt
+   `0.1.0-snapshot.g<web-sha>` und deployt `dist/` nach Pages.
 4. Das ausgelieferte `interlis-release.json` mit Commit und Lock vergleichen.
 
 Upstream-Publikationen starten diesen Workflow nicht automatisch.
+
+Der Pages-Workflow checkt dafür weder `ilic-fork` noch
+`interlis-language-tools` aus und baut keinen Compiler, kein WASM und keine
+ANTLR-Abhängigkeiten. Diese Source-Verifikation bleibt dem CI-Workflow
+vorbehalten; der Pages-Deploy prüft stattdessen die installierten npm-Artefakte
+gegen deren Lock- und Release-Metadaten.
 
 ## Stabiles Deployment
 
@@ -77,8 +96,10 @@ Provenienzmanifest bilden den stabilen Kanal.
 
 ## Fehlerbehandlung
 
-Ein fehlender SHA, eine nicht passende Versionsbasis, ein abweichender
-verschachtelter Compiler-Lock oder ein falscher Tag beendet den Build vor dem
-Pages-Upload. Fehler werden im betreffenden Repository behoben und durch einen
-neuen Lock-Commit übernommen. Ein bereits ausgeliefertes stabiles Tag wird
-nicht verschoben.
+Ein fehlendes Paket, ein falscher `gitHead`, ein abweichendes
+`interlis-release.json`, ein nicht passender verschachtelter Compiler-Lock oder
+ein falscher Tag beendet den Build vor dem Pages-Upload. Die
+Source-Verifikation in CI prüft zusätzlich fehlende SHAs, nicht passende
+Versionsbasen und fehlerhafte Upstream-Checkouts. Fehler werden im betreffenden
+Repository behoben und durch einen neuen Lock-Commit übernommen. Ein bereits
+ausgeliefertes stabiles Tag wird nicht verschoben.

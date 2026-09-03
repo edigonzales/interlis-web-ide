@@ -31,18 +31,6 @@ jobs:
         id: lock
         working-directory: interlis-web-ide
         run: node scripts/release-metadata.mjs export-github-output --output "$GITHUB_OUTPUT"
-      - uses: actions/checkout@v6
-        with:
-          repository: edigonzales/interlis-language-tools
-          ref: ${{ steps.lock.outputs.language_tools_sha }}
-          path: interlis-language-tools
-          persist-credentials: false
-      - uses: actions/checkout@v6
-        with:
-          repository: edigonzales/ilic-fork
-          ref: ${{ steps.lock.outputs.compiler_sha }}
-          path: ilic-fork
-          persist-credentials: false
       - uses: pnpm/action-setup@v4
         with:
           version: 11.14.0
@@ -50,9 +38,7 @@ jobs:
         with:
           node-version: "22"
           cache: pnpm
-          cache-dependency-path: |
-            interlis-language-tools/pnpm-lock.yaml
-            interlis-web-ide/pnpm-lock.yaml
+          cache-dependency-path: interlis-web-ide/pnpm-lock.yaml
       - name: Select release channel
         id: release
         working-directory: interlis-web-ide
@@ -67,9 +53,12 @@ jobs:
             channel=snapshot
           fi
           echo "channel=$channel" >> "$GITHUB_OUTPUT"
-      - name: Build and install exact locked dependencies
+      - name: Install exact published dependencies
         working-directory: interlis-web-ide
-        run: ./scripts/prepare-locked-dependencies.sh
+        run: pnpm install --frozen-lockfile
+      - name: Verify installed package provenance
+        working-directory: interlis-web-ide
+        run: pnpm release:verify-installed
       - name: Check and build Web IDE
         working-directory: interlis-web-ide
         run: pnpm check
