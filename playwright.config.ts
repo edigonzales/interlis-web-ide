@@ -9,7 +9,7 @@ export default defineConfig({
   retries: process.env.CI ? 1 : 0,
   reporter: process.env.CI ? [["html"], ["github"]] : "line",
   use: {
-    baseURL: "http://127.0.0.1:4173/interlis-web-ide/",
+    baseURL: "http://127.0.0.1:4173/",
     trace: "retain-on-failure",
     serviceWorkers: "allow",
   },
@@ -18,7 +18,7 @@ export default defineConfig({
       process.env.PLAYWRIGHT_PREBUILT === "1"
         ? previewCommand
         : `pnpm build && ${previewCommand}`,
-    url: "http://127.0.0.1:4173/interlis-web-ide/",
+    url: "http://127.0.0.1:4173/",
     reuseExistingServer: !process.env.CI,
     timeout: 180_000,
   },

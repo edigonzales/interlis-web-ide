@@ -1,12 +1,12 @@
 allowBuilds:
   esbuild: true
+minimumReleaseAgeExclude:
+  - '@ilic/compiler-wasm@0.10.0-snapshot.gc601f1c9d88e'
+  - '@ilic/diagram@0.1.2-snapshot.gf27801bfebf0'
+  - '@ilic/docx@0.1.2-snapshot.gf27801bfebf0'
+  - '@ilic/language-service@0.1.2-snapshot.gf27801bfebf0'
+  - '@ilic/monaco-adapter@0.1.2-snapshot.gf27801bfebf0'
+  - '@ilic/repository-core@0.10.0-snapshot.gc601f1c9d88e'
+  - '@ilic/tools@0.10.0-snapshot.gc601f1c9d88e'
 onlyBuiltDependencies:
   - esbuild
-overrides:
-  "@ilic/repository-core": file:../interlis-language-tools/artifacts/npm/ilic-repository-core-snapshot.tgz
-  "@ilic/tools": file:../interlis-language-tools/artifacts/npm/ilic-tools-snapshot.tgz
-  "@ilic/compiler-wasm": file:../interlis-language-tools/artifacts/npm/ilic-compiler-wasm-snapshot.tgz
-  "@ilic/diagram": file:../interlis-language-tools/artifacts/npm/ilic-diagram-snapshot.tgz
-  "@ilic/docx": file:../interlis-language-tools/artifacts/npm/ilic-docx-snapshot.tgz
-  "@ilic/language-service": file:../interlis-language-tools/artifacts/npm/ilic-language-service-snapshot.tgz
-  "@ilic/monaco-adapter": file:../interlis-language-tools/artifacts/npm/ilic-monaco-adapter-snapshot.tgz

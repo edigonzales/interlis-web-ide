@@ -1,0 +1,9 @@
+allowBuilds:
+  esbuild: true
+onlyBuiltDependencies:
+  - esbuild
+overrides:
+  "@ilic/diagram": "file:../interlis-language-tools/artifacts/npm/ilic-diagram.tgz"
+  "@ilic/docx": "file:../interlis-language-tools/artifacts/npm/ilic-docx.tgz"
+  "@ilic/language-service": "file:../interlis-language-tools/artifacts/npm/ilic-language-service.tgz"
+  "@ilic/monaco-adapter": "file:../interlis-language-tools/artifacts/npm/ilic-monaco-adapter.tgz"

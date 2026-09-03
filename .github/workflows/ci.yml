@@ -16,20 +16,26 @@ permissions:
 jobs:
   verify:
     runs-on: ubuntu-latest
-    timeout-minutes: 35
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@v6
         with:
           path: interlis-web-ide
           persist-credentials: false
+      - name: Read committed dependency lock
+        id: lock
+        working-directory: interlis-web-ide
+        run: node scripts/release-metadata.mjs export-github-output --output "$GITHUB_OUTPUT"
       - uses: actions/checkout@v6
         with:
           repository: edigonzales/interlis-language-tools
+          ref: ${{ steps.lock.outputs.language_tools_sha }}
           path: interlis-language-tools
           persist-credentials: false
       - uses: actions/checkout@v6
         with:
           repository: edigonzales/ilic-fork
+          ref: ${{ steps.lock.outputs.compiler_sha }}
           path: ilic-fork
           persist-credentials: false
       - uses: pnpm/action-setup@v4
@@ -42,36 +48,16 @@ jobs:
           cache-dependency-path: |
             interlis-language-tools/pnpm-lock.yaml
             interlis-web-ide/pnpm-lock.yaml
-      - name: Build pinned compiler WASM
-        shell: bash
-        working-directory: ilic-fork
-        run: |
-          set -euo pipefail
-          emscripten_version=$(tr -d '[:space:]' < .emscripten-version)
-          git clone --depth 1 https://github.com/emscripten-core/emsdk.git "$RUNNER_TEMP/emsdk"
-          "$RUNNER_TEMP/emsdk/emsdk" install "$emscripten_version"
-          "$RUNNER_TEMP/emsdk/emsdk" activate "$emscripten_version"
-          source "$RUNNER_TEMP/emsdk/emsdk_env.sh"
-          ./scripts/build-wasm.sh
-      - name: Build cross-repository npm tarballs
-        working-directory: interlis-language-tools
-        run: pnpm install --frozen-lockfile && pnpm pack:verify
-      # Cross-repository tarballs are generated during this job. Their bytes,
-      # and therefore their local file integrity, are intentionally resolved
-      # on the runner instead of being trusted from the committed lockfile.
-      # CI enables frozen-lockfile by default, so it must be disabled explicitly
-      # for this runner-local checksum refresh.
-      - run: pnpm install --no-frozen-lockfile --force --update-checksums
+      - name: Build and install exact locked dependencies
         working-directory: interlis-web-ide
-      - run: pnpm check
+        run: ./scripts/prepare-locked-dependencies.sh
+      - name: Check and build Web IDE
         working-directory: interlis-web-ide
-      - name: Upload browser runtime
-        uses: actions/upload-artifact@v6
+        run: pnpm check
+      - uses: actions/upload-artifact@v6
         with:
           name: interlis-web-ide-runtime-${{ github.sha }}
-          path: |
-            interlis-web-ide/dist
-            interlis-language-tools/artifacts/npm/*.tgz
+          path: interlis-web-ide/dist
           if-no-files-found: error
           retention-days: 14
       - run: pnpm exec playwright install --with-deps chromium firefox
@@ -88,9 +74,6 @@ jobs:
           if-no-files-found: ignore
           retention-days: 14
 
-  # Keep WebKit in a separate macOS job: the current Playwright/WebKit setup
-  # works reliably only on macOS. The job consumes verify's tested runtime so
-  # it does not rebuild the application a second time.
   webkit:
     needs: verify
     runs-on: macos-latest
@@ -108,15 +91,12 @@ jobs:
           node-version: "22"
           cache: pnpm
           cache-dependency-path: interlis-web-ide/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+        working-directory: interlis-web-ide
       - uses: actions/download-artifact@v7
         with:
           name: interlis-web-ide-runtime-${{ github.sha }}
-          path: .
-      # The runtime artifact contains freshly generated local tarballs whose
-      # checksums can differ from the source lockfile. CI's implicit frozen
-      # mode must be disabled for the runner-local checksum refresh.
-      - run: pnpm install --no-frozen-lockfile --force --update-checksums
-        working-directory: interlis-web-ide
+          path: interlis-web-ide/dist
       - run: pnpm exec playwright install webkit
         working-directory: interlis-web-ide
       - run: pnpm e2e --project webkit

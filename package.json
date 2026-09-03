@@ -1,6 +1,6 @@
 {
   "name": "interlis-web-ide",
-  "version": "1.0.0-rc.1",
+  "version": "0.1.0",
   "private": true,
   "type": "module",
   "packageManager": "pnpm@11.14.0",
@@ -16,7 +16,8 @@
     "test:coverage": "vitest run --coverage",
     "lint": "eslint .",
     "format:check": "prettier --check .",
-    "check": "pnpm lint && pnpm typecheck && pnpm test && pnpm test:release && pnpm build",
+    "check": "pnpm release:check && pnpm lint && pnpm typecheck && pnpm test && pnpm test:release && pnpm build",
+    "release:check": "node scripts/release-metadata.mjs check",
     "test:release": "node --test test/release/*Test.mjs",
     "e2e": "playwright test",
     "e2e:public-clone": "RUN_PUBLIC_CLONE=1 playwright test e2e/public-clone.spec.ts"
@@ -35,11 +36,11 @@
     "vitest": "^4.0.16"
   },
   "dependencies": {
-    "@ilic/tools": "snapshot",
-    "@ilic/diagram": "snapshot",
-    "@ilic/docx": "snapshot",
-    "@ilic/language-service": "snapshot",
-    "@ilic/monaco-adapter": "snapshot",
+    "@ilic/tools": "0.10.0-snapshot.gc601f1c9d88e",
+    "@ilic/diagram": "0.1.2-snapshot.gf27801bfebf0",
+    "@ilic/docx": "0.1.2-snapshot.gf27801bfebf0",
+    "@ilic/language-service": "0.1.2-snapshot.gf27801bfebf0",
+    "@ilic/monaco-adapter": "0.1.2-snapshot.gf27801bfebf0",
     "@codingame/monaco-vscode-api": "35.0.1",
     "@codingame/monaco-vscode-configuration-service-override": "35.0.1",
     "@codingame/monaco-vscode-files-service-override": "35.0.1",

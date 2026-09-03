@@ -1,22 +1,10 @@
 name: Deploy Web IDE
 
 on:
-  repository_dispatch:
-    types: [release-train-published]
   workflow_dispatch:
-    inputs:
-      compiler_sha:
-        description: Optional exact ilic-fork commit SHA (must be supplied with compiler_version)
-        required: false
-        type: string
-      compiler_version:
-        description: Optional exact ilic version, stable or snapshot
-        required: false
-        type: string
-      language_tools_sha:
-        description: Optional exact language-tools commit SHA
-        required: false
-        type: string
+  push:
+    tags:
+      - "v*"
 
 permissions:
   contents: read
@@ -25,97 +13,36 @@ permissions:
 
 concurrency:
   group: pages
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v6
         with:
+          ref: ${{ github.ref }}
           path: interlis-web-ide
+          fetch-depth: 0
+          fetch-tags: true
           persist-credentials: false
+      - name: Read committed dependency lock
+        id: lock
+        working-directory: interlis-web-ide
+        run: node scripts/release-metadata.mjs export-github-output --output "$GITHUB_OUTPUT"
       - uses: actions/checkout@v6
         with:
           repository: edigonzales/interlis-language-tools
-          ref: ${{ github.event_name == 'repository_dispatch' && github.event.client_payload.language_tools_sha || inputs.language_tools_sha || 'main' }}
+          ref: ${{ steps.lock.outputs.language_tools_sha }}
           path: interlis-language-tools
           persist-credentials: false
       - uses: actions/checkout@v6
         with:
           repository: edigonzales/ilic-fork
-          ref: ${{ github.event_name == 'repository_dispatch' && github.event.client_payload.compiler_sha || inputs.compiler_sha || 'main' }}
+          ref: ${{ steps.lock.outputs.compiler_sha }}
           path: ilic-fork
           persist-credentials: false
-      - name: Resolve and validate release metadata
-        id: metadata
-        env:
-          EVENT_NAME: ${{ github.event_name }}
-          EVENT_COMPILER_SHA: ${{ github.event.client_payload.compiler_sha }}
-          EVENT_LANGUAGE_TOOLS_SHA: ${{ github.event.client_payload.language_tools_sha }}
-          EVENT_COMPILER_VERSION: ${{ github.event.client_payload.compiler_version }}
-          EVENT_LANGUAGE_TOOLS_VERSION: ${{ github.event.client_payload.language_tools_version }}
-          EVENT_COMPILER_TIMESTAMP: ${{ github.event.client_payload.compiler_timestamp }}
-          EVENT_COMPILER_BUILD_ID: ${{ github.event.client_payload.compiler_build_id }}
-          EVENT_LANGUAGE_TIMESTAMP: ${{ github.event.client_payload.language_timestamp }}
-          EVENT_LANGUAGE_BUILD_ID: ${{ github.event.client_payload.language_build_id }}
-          EVENT_RELEASE_RUN_ID: ${{ github.event.client_payload.release_run_id }}
-          INPUT_COMPILER_SHA: ${{ inputs.compiler_sha }}
-          INPUT_COMPILER_VERSION: ${{ inputs.compiler_version }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          actual_compiler_sha=$(git -C ilic-fork rev-parse HEAD)
-          actual_language_tools_sha=$(git -C interlis-language-tools rev-parse HEAD)
-          if [[ "$EVENT_NAME" == "repository_dispatch" ]]; then
-            node interlis-web-ide/scripts/validate-release-metadata.mjs \
-              --compiler-sha "$EVENT_COMPILER_SHA" \
-              --language-tools-sha "$EVENT_LANGUAGE_TOOLS_SHA" \
-              --compiler-version "$EVENT_COMPILER_VERSION" \
-              --language-tools-version "$EVENT_LANGUAGE_TOOLS_VERSION" \
-              --compiler-timestamp "$EVENT_COMPILER_TIMESTAMP" \
-              --compiler-build-id "$EVENT_COMPILER_BUILD_ID" \
-              --language-timestamp "$EVENT_LANGUAGE_TIMESTAMP" \
-              --language-build-id "$EVENT_LANGUAGE_BUILD_ID" \
-              --release-run-id "$EVENT_RELEASE_RUN_ID" \
-              --checked-out-compiler-sha "$actual_compiler_sha" \
-              --checked-out-language-tools-sha "$actual_language_tools_sha" \
-              --compiler-cmake ilic-fork/CMakeLists.txt \
-              --language-tools-package interlis-language-tools/package.json \
-              --github-output "$GITHUB_OUTPUT"
-          else
-            compiler_sha=$(git -C ilic-fork rev-parse HEAD)
-            language_tools_sha=$(git -C interlis-language-tools rev-parse HEAD)
-            if [[ -n "$INPUT_COMPILER_SHA" || -n "$INPUT_COMPILER_VERSION" ]]; then
-              [[ -n "$INPUT_COMPILER_SHA" && -n "$INPUT_COMPILER_VERSION" ]] || {
-                echo "compiler_sha and compiler_version must be supplied together" >&2
-                exit 1
-              }
-              [[ "$compiler_sha" == "$INPUT_COMPILER_SHA" ]] || {
-                echo "Checked-out compiler SHA does not match compiler_sha input" >&2
-                exit 1
-              }
-              compiler_version="$INPUT_COMPILER_VERSION"
-            else
-              compiler_version=$(node --input-type=module -e '
-                import { readFile } from "node:fs/promises";
-                import { readIlicProjectVersion } from "./interlis-web-ide/scripts/validate-release-metadata.mjs";
-                process.stdout.write(readIlicProjectVersion(await readFile("ilic-fork/CMakeLists.txt", "utf8")));
-              ')
-            fi
-            language_timestamp=$(date -u +%Y%m%d%H%M%S)
-            language_build_id="$GITHUB_RUN_ID"
-            language_base_version=$(node -p "require('./interlis-language-tools/package.json').version")
-            language_tools_version="${language_base_version}-SNAPSHOT.${language_timestamp}.${language_build_id}"
-            {
-              echo "compiler_sha=$compiler_sha"
-              echo "language_tools_sha=$language_tools_sha"
-              echo "compiler_version=$compiler_version"
-              echo "language_tools_version=$language_tools_version"
-              echo "language_timestamp=$language_timestamp"
-              echo "language_build_id=$language_build_id"
-            } >> "$GITHUB_OUTPUT"
-          fi
       - uses: pnpm/action-setup@v4
         with:
           version: 11.14.0
@@ -126,37 +53,36 @@ jobs:
           cache-dependency-path: |
             interlis-language-tools/pnpm-lock.yaml
             interlis-web-ide/pnpm-lock.yaml
-      - name: Build pinned compiler WASM
+      - name: Select release channel
+        id: release
+        working-directory: interlis-web-ide
         shell: bash
-        working-directory: ilic-fork
-        env:
-          ILIC_WASM_VERSION: ${{ steps.metadata.outputs.compiler_version }}
         run: |
           set -euo pipefail
-          emscripten_version=$(tr -d '[:space:]' < .emscripten-version)
-          git clone --depth 1 https://github.com/emscripten-core/emsdk.git "$RUNNER_TEMP/emsdk"
-          "$RUNNER_TEMP/emsdk/emsdk" install "$emscripten_version"
-          "$RUNNER_TEMP/emsdk/emsdk" activate "$emscripten_version"
-          source "$RUNNER_TEMP/emsdk/emsdk_env.sh"
-          ./scripts/build-wasm.sh
-      - name: Build cross-repository npm tarballs
-        working-directory: interlis-language-tools
-        env:
-          SNAPSHOT_TIMESTAMP: ${{ steps.metadata.outputs.language_timestamp }}
-          SNAPSHOT_BUILD_ID: ${{ steps.metadata.outputs.language_build_id }}
-          COMPILER_VERSION: ${{ steps.metadata.outputs.compiler_version }}
-          COMPILER_SHA: ${{ steps.metadata.outputs.compiler_sha }}
-          LANGUAGE_TOOLS_VERSION: ${{ steps.metadata.outputs.language_tools_version }}
+          if [[ "$GITHUB_REF_TYPE" == tag ]]; then
+            test "$GITHUB_REF_NAME" = "v${{ steps.lock.outputs.artifact_base_version }}"
+            channel=stable
+          else
+            test "$GITHUB_REF" = refs/heads/main
+            channel=snapshot
+          fi
+          echo "channel=$channel" >> "$GITHUB_OUTPUT"
+      - name: Build and install exact locked dependencies
+        working-directory: interlis-web-ide
+        run: ./scripts/prepare-locked-dependencies.sh
+      - name: Check and build Web IDE
+        working-directory: interlis-web-ide
+        run: pnpm check
+      - name: Write release provenance
+        working-directory: interlis-web-ide
+        shell: bash
         run: |
           set -euo pipefail
-          pnpm install --frozen-lockfile
-          pnpm pack:verify
-      # CI enables frozen-lockfile by default, but these local release tarballs
-      # need their runner-local checksums resolved from the generated bytes.
-      - run: pnpm install --no-frozen-lockfile --force --update-checksums
-        working-directory: interlis-web-ide
-      - run: pnpm check
-        working-directory: interlis-web-ide
+          args=(manifest --source-sha "$GITHUB_SHA" --channel "${{ steps.release.outputs.channel }}" --run-id "$GITHUB_RUN_ID" --built-at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" --toolchain "node-$(node -p 'process.versions.node')" --output dist/interlis-release.json)
+          if [[ "${{ steps.release.outputs.channel }}" == stable ]]; then
+            args+=(--tag "$GITHUB_REF_NAME")
+          fi
+          node scripts/release-metadata.mjs "${args[@]}"
       - uses: actions/configure-pages@v6
       - uses: actions/upload-pages-artifact@v4
         with:
